@@ -1,4 +1,4 @@
-# eco-worthy-battery-logger-web
+# Ecoworthy-Battery-Monitor-Web
 
 Fork of **eco-worthy-battery-logger** with a rewrite, including improvements to BLE stability and added SQLite logging for use with a web interface.
 
