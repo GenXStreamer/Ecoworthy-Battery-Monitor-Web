@@ -1,6 +1,6 @@
 # Ecoworthy-Battery-Monitor-Web
 
-Fork of **eco-worthy-battery-logger** with a rewrite, including improvements to BLE stability and added SQLite logging for use with a web interface.
+**eco-worthy-battery-logger** rewrite, as there was no Licence. Improvements to BLE stability and added SQLite logging for use with a web interface.
 
 Original project, and inspiration: https://github.com/mike805/eco-worthy-battery-logger
 
