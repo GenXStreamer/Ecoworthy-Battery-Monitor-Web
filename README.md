@@ -16,6 +16,23 @@ This project has three components:
 
 ---
 
+## Requirements
+
+Create a Python Virtual Environment
+```bash
+python -m venv /path/to/venv
+```
+Install dependencies:
+
+```bash
+source /path/to/venv/bin/activate
+pip install bluepy Flask
+```
+
+> Note: `sqlite3`, `argparse`, and `jsonify` are part of the Python standard library.
+
+---
+
 ## ecoworthy-battery-monitor.py
 
 This script connects to the battery over BLE and records telemetry data.
@@ -80,19 +97,6 @@ Default URL:
 - http://localhost:5001  
 - http://IP_ADDRESS:5001  
 - http://FQDN:5001  
-
----
-
-## Requirements
-
-Install dependencies:
-
-```bash
-source /path/to/venv/bin/activate
-pip install bluepy Flask
-```
-
-> Note: `sqlite3`, `argparse`, and `jsonify` are part of the Python standard library.
 
 ---
 
