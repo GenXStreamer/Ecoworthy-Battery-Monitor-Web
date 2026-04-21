@@ -1,0 +1,10 @@
+[Unit]
+Description=Ecoworthy Battery BLE Poller
+After=network-online.target bluetooth.service
+
+[Service]
+ExecStart=/path/to/venv/bin/python /path/to/ecoworthy-battery-monitor.py -m a5:c2:37:6d:9f:de -i 10 -d /path/to/batt.db
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
