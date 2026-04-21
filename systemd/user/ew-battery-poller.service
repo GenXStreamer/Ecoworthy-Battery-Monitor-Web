@@ -1,3 +1,6 @@
+# Systemd USER file for Battery Poller
+# Goes in ~/.config/systemd/user
+
 [Unit]
 Description=Ecoworthy Battery BLE Poller
 After=network-online.target bluetooth.service
