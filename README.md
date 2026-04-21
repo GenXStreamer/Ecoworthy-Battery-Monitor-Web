@@ -43,7 +43,7 @@ This script connects to the battery over BLE and records telemetry data.
 /path/to/env/bin/python ecoworthy-battery-monitor.py \
   -m a5:c2:37:6d:9f:de \
   -i 10 \
-  -d /path/to/database/batt.db
+  -d /path/to/database/batt.db -v
 ```
 
 ---
