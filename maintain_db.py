@@ -3,7 +3,7 @@
 maintain_db.py  –  Tiered retention for batt.db
 
 Run nightly via cron, e.g.:
-    0 3 * * * /path/env/bin/python3 /path/to/maintain_db.py -d /path/to/batt.db
+    0 3 * * * /usr/bin/python3 /home/pi/maintain_db.py -d /home/pi/batt.db
 
 Retention tiers
 ───────────────

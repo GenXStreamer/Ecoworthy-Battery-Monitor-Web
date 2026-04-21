@@ -2,7 +2,7 @@
 
 **eco-worthy-battery-logger** rewrite, as there was no Licence. Improvements to BLE stability and added SQLite logging for use with a web interface.
 
-Original project, research, and inspiration: https://github.com/mike805/eco-worthy-battery-logger
+Original project, and inspiration: https://github.com/mike805/eco-worthy-battery-logger
 
 ---
 
@@ -13,23 +13,6 @@ This project has three components:
 - `ecoworthy-battery-monitor.py` – collects data from the battery via BLE
 - `webapp.py` – Flask web interface for viewing stored data
 - `maintain_db.py` – database retention and summarisation tool
-
----
-
-## Requirements
-
-Create a Python Virtual Environment
-```bash
-python -m venv /path/to/venv
-```
-Install dependencies:
-
-```bash
-source /path/to/venv/bin/activate
-pip install bluepy Flask
-```
-
-> Note: `sqlite3`, `argparse`, and `jsonify` are part of the Python standard library.
 
 ---
 
@@ -100,6 +83,19 @@ Default URL:
 
 ---
 
+## Requirements
+
+Install dependencies:
+
+```bash
+source /path/to/venv/bin/activate
+pip install bluepy Flask
+```
+
+> Note: `sqlite3`, `argparse`, and `jsonify` are part of the Python standard library.
+
+---
+
 ## maintain_db.py
 
 Performs tiered retention and summarisation of `batt.db`.
@@ -131,10 +127,6 @@ Performs tiered retention and summarisation of `batt.db`.
 Summarisation writes into `battery_summary` before deleting raw rows, preserving min/max/avg statistics.
 
 ---
-
-## Troubleshooting
-Its worth noting, the BMS on the Ecoworthy batteries only support a single connection. If you have used the eco-worthy app, make sure it is no longer running and connected in the background. 
-You can check /var/log/syslog from any messages from the poller script. 
 
 ## Screenshots
 
