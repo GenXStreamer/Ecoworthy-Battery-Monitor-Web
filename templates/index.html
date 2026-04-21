@@ -1,715 +1,794 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Battery Monitor</title>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Battery Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600&display=swap');
 
-    <style>
-        :root {
-            --bg:       #0d0f14;
-            --surface:  #151820;
-            --border:   #1e2330;
-            --text:     #c8cdd8;
-            --dim:      #5a6070;
-            --green:    #2dff8a;
-            --amber:    #ffb830;
-            --red:      #ff4060;
-            --blue:     #38aaff;
-            --accent:   #2dff8a;
-        }
+  :root {
+    --bg:        #0d1117;
+    --bg2:       #161b22;
+    --bg3:       #21262d;
+    --border:    #30363d;
+    --text:      #e6edf3;
+    --muted:     #7d8590;
+    --green:     #3fb950;
+    --green-dim: #1a4a22;
+    --yellow:    #d29922;
+    --red:       #f85149;
+    --red-dim:   #4a1a1a;
+    --blue:      #58a6ff;
+    --cyan:      #39c5cf;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'DM Sans', sans-serif;
+  }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        body {
-            font-family: 'JetBrains Mono', monospace;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            padding: 24px;
-        }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-weight: 300;
+    min-height: 100vh;
+    padding: 1.5rem;
+  }
 
-        /* ── Header ── */
-        header {
-            display: flex;
-            align-items: baseline;
-            gap: 16px;
-            margin-bottom: 28px;
-        }
-        header h1 {
-            font-family: 'DM Sans', sans-serif;
-            font-weight: 700;
-            font-size: 1.5rem;
-            letter-spacing: -0.02em;
-            color: #fff;
-        }
-        #live-badge {
-            font-size: 0.65rem;
-            font-weight: 700;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: var(--green);
-            background: rgba(45,255,138,0.12);
-            border: 1px solid rgba(45,255,138,0.25);
-            border-radius: 4px;
-            padding: 2px 8px;
-        }
-        #live-badge.stale { color: var(--red); background: rgba(255,64,96,0.1); border-color: rgba(255,64,96,0.25); }
-        #clock {
-            margin-left: auto;
-            font-size: 0.75rem;
-            color: var(--dim);
-        }
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1rem;
+  }
+  header h1 {
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    letter-spacing: 0.1em;
+    color: var(--cyan);
+  }
+  #conn-status {
+    font-size: 0.8rem;
+    font-family: var(--mono);
+    padding: 0.2rem 0.6rem;
+    border-radius: 2rem;
+    background: var(--bg3);
+    color: var(--muted);
+  }
+  #conn-status.ok  { background: var(--green-dim); color: var(--green); }
+  #conn-status.err { background: var(--red-dim);   color: var(--red); }
+  #last-update { margin-left: auto; font-size: 0.8rem; color: var(--muted); font-family: var(--mono); }
 
-        /* ── Top row: gauge + state + key metrics ── */
-        .top-row {
-            display: grid;
-            grid-template-columns: 280px 1fr;
-            gap: 16px;
-            margin-bottom: 16px;
-        }
+  /* ── Grid layout ── */
+  .grid {
+    display: grid;
+    gap: 1rem;
+  }
+  .grid-top    { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+  .grid-middle { grid-template-columns: 2fr 1fr; margin-top: 1rem; }
+  .grid-bottom { grid-template-columns: 1fr 1fr; margin-top: 1rem; }
 
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 20px;
-        }
+  @media (max-width: 700px) {
+    .grid-middle, .grid-bottom { grid-template-columns: 1fr; }
+  }
 
-        #gauge-wrap {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 16px;
-        }
-        #gauge { width: 240px; height: 180px; }
+  /* ── Cards ── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+  }
+  .card-label {
+    font-size: 0.85rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+  }
+  .card-value {
+    font-family: var(--mono);
+    font-size: 1.7rem;
+    line-height: 1;
+  }
+  .card-unit {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-left: 0.2rem;
+  }
+  .card-sub {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.35rem;
+    font-family: var(--mono);
+  }
 
-        /* charging state pill */
-        #state-pill {
-            margin-top: 8px;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 1.1rem;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        #state-arrow {
-            font-size: 1.4rem;
-            line-height: 1;
-        }
+  /* colour variants */
+  .val-green  { color: var(--green); }
+  .val-yellow { color: var(--yellow); }
+  .val-red    { color: var(--red); }
+  .val-blue   { color: var(--blue); }
+  .val-cyan   { color: var(--cyan); }
 
-        /* key metrics grid */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            grid-template-rows: repeat(2, 1fr);
-            gap: 10px;
-        }
-        .metric {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 14px 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        .metric-label {
-            font-size: 0.6rem;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            color: var(--dim);
-        }
-        .metric-value {
-            font-family: 'DM Sans', sans-serif;
-            font-size: 1.55rem;
-            font-weight: 700;
-            color: #fff;
-            letter-spacing: -0.02em;
-        }
-        .metric-unit {
-            font-size: 0.7rem;
-            color: var(--dim);
-        }
-        .metric-value.green { color: var(--green); }
-        .metric-value.amber { color: var(--amber); }
-        .metric-value.red   { color: var(--red);   }
-        .metric-value.blue  { color: var(--blue);  }
+  /* ── Charts card ── */
+  .chart-card { padding: 1rem; }
+  .chart-tabs { display: flex; gap: 0.4rem; margin-bottom: 0.8rem; flex-wrap: wrap; }
+  .tab-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    padding: 0.25rem 0.7rem;
+    border-radius: 3px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+  }
+  .tab-btn.active { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+  .time-btns { display: flex; gap: 0.5rem; margin-bottom: 0.6rem; flex-wrap: wrap; align-items: center; }
+  .time-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .time-btn.active { border-color: var(--cyan); color: var(--cyan); }
 
-        /* ── Stats row ── */
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 10px;
-            margin-bottom: 16px;
-        }
-        .stat-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 14px 16px;
-        }
-        .stat-title {
-            font-size: 0.58rem;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            color: var(--dim);
-            margin-bottom: 6px;
-        }
-        .stat-main {
-            font-family: 'DM Sans', sans-serif;
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #fff;
-        }
-        .stat-sub {
-            font-size: 0.68rem;
-            color: var(--dim);
-            margin-top: 2px;
-        }
-        .stat-sub span { color: var(--text); }
+  /* ── Date range picker ── */
+  .date-range {
+    display: flex; align-items: center; gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.8rem;
+    padding: 0.5rem 0.7rem;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+  .date-range label { font-size: 0.7rem; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+  .date-range input[type="datetime-local"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    padding: 0.2rem 0.4rem;
+    cursor: pointer;
+    color-scheme: dark;
+  }
+  .date-range input[type="datetime-local"]:focus { outline: none; border-color: var(--cyan); }
+  .date-range-sep { color: var(--muted); font-size: 0.75rem; font-family: var(--mono); }
+  .date-go-btn {
+    background: var(--cyan);
+    border: none;
+    border-radius: 3px;
+    color: var(--bg);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    padding: 0.25rem 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .date-go-btn:hover { opacity: 0.85; }
+  .date-range-mode { font-size: 0.7rem; color: var(--cyan); font-family: var(--mono); margin-left: auto; }
+  .chart-wrap { position: relative; height: 220px; }
 
-        /* ── Time window controls ── */
-        .time-controls {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-        }
-        .time-controls label {
-            font-size: 0.65rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: var(--dim);
-            margin-right: 4px;
-        }
-        .tw-btn {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.72rem;
-            font-weight: 700;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            color: var(--text);
-            border-radius: 6px;
-            padding: 5px 12px;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-        .tw-btn:hover { border-color: var(--accent); color: var(--accent); }
-        .tw-btn.active {
-            background: rgba(45,255,138,0.12);
-            border-color: var(--accent);
-            color: var(--accent);
-        }
-        .live-indicator {
-            margin-left: auto;
-            font-size: 0.65rem;
-            color: var(--dim);
-        }
-        #window-label {
-            color: var(--text);
-        }
+  /* ── Cell voltage bar chart ── */
+  .cells-card { padding: 1rem; }
+  .cells-title { font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.8rem; }
+  .cell-bars { display: flex; gap: 4px; align-items: flex-end; height: 80px; }
+  .cell-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .cell-bar {
+    width: 100%;
+    background: var(--cyan);
+    border-radius: 2px 2px 0 0;
+    transition: height 0.4s ease;
+    min-height: 2px;
+    position: relative;
+  }
+  .cell-bar.balancing { background: var(--yellow); }
+  .cell-bar.low       { background: var(--red); }
+  .cell-num { font-size: 0.7rem; color: var(--muted); font-family: var(--mono); }
+  .cell-volt { font-size: 0.8rem; color: var(--text); font-family: var(--mono); }
+  .cell-legend { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.8em; color: var(--muted); font-family: var(--mono); }
+  .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 1px; margin-right: 3px; vertical-align: middle; }
 
-        /* ── Charts ── */
-        .chart-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 16px 20px;
-            margin-bottom: 14px;
-        }
-        .chart-title {
-            font-size: 0.65rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: var(--dim);
-            margin-bottom: 12px;
-        }
-        #graph_charge, #graph_current, #graph_volts {
-            width: 100%;
-            height: 220px;
-        }
+  /* ── Temps ── */
+  .temps-card { padding: 1rem; }
+  .probe-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.4rem; }
+  .probe-row { display: flex; align-items: center; gap: 0.8rem; }
+  .probe-label { font-size: 0.8rem; color: var(--muted); font-family: var(--mono); width: 4rem; }
+  .probe-bar-bg { flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .probe-bar-fill { height: 100%; border-radius: 3px; background: var(--cyan); transition: width 0.4s; }
+  .probe-val { font-family: var(--mono); font-size: 0.8rem; width: 4rem; text-align: right; }
 
-        /* ── Responsive ── */
-        @media (max-width: 700px) {
-            .top-row { grid-template-columns: 1fr; }
-            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
-            .stats-row { grid-template-columns: repeat(2, 1fr); }
-        }
-    </style>
+  /* ── Protection alerts ── */
+  .alerts-card { padding: 1rem; }
+  .alert-list { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.4rem; }
+  .alert-item {
+    display: flex; align-items: center; gap: 0.5rem;
+    background: var(--red-dim);
+    border: 1px solid var(--red);
+    border-radius: 4px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.8rem;
+    font-family: var(--mono);
+    color: var(--red);
+  }
+  .alert-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); flex-shrink: 0; animation: pulse 1s ease infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .no-alerts { font-size: 1.2rem; color: var(--green); font-family: var(--mono); margin-top: 0.4rem; }
+
+  /* ── Stats row ── */
+  .stats-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  .stat-pill {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.25rem 0.7rem;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+  .stat-pill span { color: var(--text); margin-left: 0.3rem; }
+
+  /* ── Device info ── */
+  .device-card { padding: 1rem; }
+  .device-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 1.2rem; margin-top: 0.4rem; }
+  .device-key { font-size: 0.8rem; color: var(--muted); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+  .device-val { font-size: 0.8rem; font-family: var(--mono); color: var(--text); }
+
+  /* ── SOC arc ── */
+  .soc-card { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .soc-svg-wrap { position: relative; width: 120px; height: 70px; }
+  .soc-svg-wrap svg { overflow: visible; }
+  .soc-center-text { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); font-family: var(--mono); font-size: 1.4rem; line-height: 1; text-align: center; }
+  .soc-sub { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; font-family: var(--mono); text-align: center; }
+</style>
 </head>
 <body>
 
 <header>
-    <h1>Battery Monitor</h1>
-    <span id="live-badge">LIVE</span>
-    <span id="clock">--:--:--</span>
+  <h1>⚡ BATTERY MONITOR</h1>
+  <span id="conn-status">connecting…</span>
+  <span id="last-update"></span>
 </header>
 
-<!-- Gauge + key metrics -->
-<div class="top-row">
-    <div class="card" id="gauge-wrap">
-        <div id="gauge"></div>
-        <div id="state-pill">
-            <span id="state-arrow">–</span>
-            <span id="state-text">Idle</span>
-        </div>
+<!-- Top KPI row -->
+<div class="grid grid-top">
+  <div class="card soc-card" id="card-soc">
+    <div class="card-label">State of Charge</div>
+    <div class="soc-svg-wrap">
+      <svg viewBox="0 0 120 65" width="120" height="65">
+        <path id="soc-track" d="M10,60 A55,55 0 0,1 110,60" fill="none" stroke="#21262d" stroke-width="10" stroke-linecap="round"/>
+        <path id="soc-fill"  d="M10,60 A55,55 0 0,1 110,60" fill="none" stroke="#3fb950" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 173" style="transition:stroke-dasharray 0.6s ease"/>
+      </svg>
+      <div class="soc-center-text" id="soc-val">–</div>
     </div>
+    <div class="soc-sub" id="soc-sub">– Ah / – Ah</div>
+  </div>
 
-    <div class="card metrics-grid">
-        <div class="metric">
-            <span class="metric-label">Voltage</span>
-            <span class="metric-value" id="m-volts">--</span>
-            <span class="metric-unit">V</span>
-        </div>
-        <div class="metric">
-            <span class="metric-label">Current</span>
-            <span class="metric-value" id="m-amps">--</span>
-            <span class="metric-unit">A</span>
-        </div>
-        <div class="metric">
-            <span class="metric-label">State of Charge</span>
-            <span class="metric-value" id="m-soc">--</span>
-            <span class="metric-unit">%</span>
-        </div>
-        <div class="metric">
-            <span class="metric-label">Capacity</span>
-            <span class="metric-value" id="m-soc-ah">--</span>
-            <span class="metric-unit">Ah remaining</span>
-        </div>
-        <div class="metric">
-            <span class="metric-label">Temperature</span>
-            <span class="metric-value" id="m-temp">--</span>
-            <span class="metric-unit">°C</span>
-        </div>
-        <div class="metric">
-            <span class="metric-label">Net stored (window)</span>
-            <span class="metric-value blue" id="m-net-ah">--</span>
-            <span class="metric-unit">Ah</span>
-        </div>
-    </div>
+  <div class="card">
+    <div class="card-label">Voltage</div>
+    <div class="card-value val-cyan" id="val-volts">–<span class="card-unit">V</span></div>
+    <div class="card-sub" id="sub-switches">–</div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Current</div>
+    <div class="card-value" id="val-amps">–<span class="card-unit">A</span></div>
+    <div class="card-sub" id="sub-watts">– W</div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">Cycles</div>
+    <div class="card-value val-blue" id="val-cycles">–</div>
+    <div class="card-sub">charge cycles</div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">BMS SOC</div>
+    <div class="card-value val-green" id="val-rsoc">–<span class="card-unit">%</span></div>
+    <div class="card-sub">reported by BMS</div>
+  </div>
 </div>
 
-<!-- Stats row -->
-<div class="stats-row">
-    <div class="stat-card">
-        <div class="stat-title">Peak Charge Rate</div>
-        <div class="stat-main green" id="s-max">-- A</div>
-        <div class="stat-sub">window maximum</div>
+<!-- Middle: chart + right panel -->
+<div class="grid grid-middle">
+  <div class="card chart-card">
+    <div class="chart-tabs">
+      <button class="tab-btn active" data-metric="soc_pct">SOC %</button>
+      <button class="tab-btn" data-metric="volts">Volts</button>
+      <button class="tab-btn" data-metric="amps">Amps</button>
+      <button class="tab-btn" data-metric="temp">Temp</button>
     </div>
-    <div class="stat-card">
-        <div class="stat-title">Peak Discharge Rate</div>
-        <div class="stat-main red" id="s-min">-- A</div>
-        <div class="stat-sub">window minimum</div>
+    <div class="time-btns">
+      <button class="time-btn active" data-s="1800">30m</button>
+      <button class="time-btn" data-s="21600">6h</button>
+      <button class="time-btn" data-s="86400">24h</button>
+      <button class="time-btn" data-s="604800">7d</button>
+      <button class="time-btn" data-s="2592000">30d</button>
+      <button class="time-btn" data-s="5184000">60d</button>
+      <button class="time-btn" data-s="15552000">6mo</button>
+      <button class="time-btn" data-s="31536000">1yr</button>
     </div>
-    <div class="stat-card">
-        <div class="stat-title">Average Current</div>
-        <div class="stat-main" id="s-avg">-- A</div>
-        <div class="stat-sub">over window</div>
+    <div class="date-range" id="date-range-row">
+      <label>From</label>
+      <input type="datetime-local" id="dt-from">
+      <span class="date-range-sep">→</span>
+      <label>To</label>
+      <input type="datetime-local" id="dt-to">
+      <button class="date-go-btn" id="dt-go">Go</button>
+      <span class="date-range-mode" id="date-range-mode" style="display:none">Custom range</span>
     </div>
-    <div class="stat-card">
-        <div class="stat-title">SOC Change</div>
-        <div class="stat-main" id="s-soc-delta">-- %</div>
-        <div class="stat-sub">
-            <span id="s-soc-start">--</span>% → <span id="s-soc-end">--</span>%
-        </div>
+    <div class="chart-wrap">
+      <canvas id="main-chart"></canvas>
     </div>
+    <div class="stats-row" id="stats-row"></div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:1rem;">
+    <!-- Protection alerts -->
+    <div class="card alerts-card">
+      <div class="card-label">Protection Status</div>
+      <div id="alert-list" class="alert-list"></div>
+    </div>
+
+    <!-- Device info -->
+    <div class="card device-card">
+      <div class="card-label">Device Info</div>
+      <div class="device-grid" id="device-grid">
+        <span class="device-key">MAC</span><span class="device-val" id="di-mac">–</span>
+        <span class="device-key">HW Version</span><span class="device-val" id="di-hw">–</span>
+        <span class="device-key">BMS FW</span><span class="device-val" id="di-fw">–</span>
+        <span class="device-key">Prod Date</span><span class="device-val" id="di-date">–</span>
+        <span class="device-key">Capacity</span><span class="device-val" id="di-cap">–</span>
+        <span class="device-key">Cells</span><span class="device-val" id="di-cells">–</span>
+      </div>
+    </div>
+  </div>
 </div>
 
-<!-- Time window controls -->
-<div class="time-controls">
-    <label>Window</label>
-    <button class="tw-btn" data-seconds="1800">30 min</button>
-    <button class="tw-btn" data-seconds="3600">1 hr</button>
-    <button class="tw-btn" data-seconds="21600">6 hr</button>
-    <button class="tw-btn active" data-seconds="86400">24 hr</button>
-    <button class="tw-btn" data-seconds="259200">3 days</button>
-    <button class="tw-btn" data-seconds="604800">7 days</button>
-    <button class="tw-btn" data-seconds="2592000">30 days</button>
-    <button class="tw-btn" data-seconds="7776000">90 days</button>
-    <button class="tw-btn" data-seconds="31536000">1 year</button>
-    <span class="live-indicator">Showing: <span id="window-label">last 24 hours</span></span>
-</div>
+<!-- Bottom: cells + temps -->
+<div class="grid grid-bottom">
+  <div class="card cells-card">
+    <div class="cells-title">Cell Voltages</div>
+    <div class="cell-bars" id="cell-bars"></div>
+    <div class="cell-legend">
+      <span><span class="legend-dot" style="background:var(--cyan)"></span>Normal</span>
+      <span><span class="legend-dot" style="background:var(--yellow)"></span>Balancing</span>
+      <span><span class="legend-dot" style="background:var(--red)"></span>Low (&lt;3.0V)</span>
+    </div>
+    <div id="cell-stats" class="card-sub" style="margin-top:0.5rem;"></div>
+  </div>
 
-<!-- Charts -->
-<div class="chart-card">
-    <div class="chart-title">State of Charge (%)</div>
-    <div id="graph_charge"></div>
-</div>
-<div class="chart-card">
-    <div class="chart-title">Current (A) — positive = charging</div>
-    <div id="graph_current"></div>
-</div>
-<div class="chart-card">
-    <div class="chart-title">Voltage (V)</div>
-    <div id="graph_volts"></div>
+  <div class="card temps-card">
+    <div class="card-label">Temperature Probes</div>
+    <div class="probe-list" id="probe-list"></div>
+  </div>
 </div>
 
 <script>
-// ── ECharts instances ──────────────────────────────────────────────
-
-const THEME = {
-    bg:      '#151820',
-    text:    '#5a6070',
-    grid:    '#1e2330',
-    green:   '#2dff8a',
-    amber:   '#ffb830',
-    red:     '#ff4060',
-    blue:    '#38aaff',
+// ── Chart setup ──────────────────────────────────────────────────
+const CHART_COLORS = {
+  soc_pct: '#3fb950',
+  volts:   '#58a6ff',
+  amps:    '#d29922',
+  temp:    '#39c5cf',
+};
+const CHART_LABELS = {
+  soc_pct: 'SOC %',
+  volts:   'Volts (V)',
+  amps:    'Amps (A)',
+  temp:    'Temp (°C)',
 };
 
-function baseOpt(title, seriesColor) {
-    return {
-        backgroundColor: 'transparent',
-        animation: false,
-        tooltip: {
-            trigger: 'axis',
-            backgroundColor: '#0d0f14',
-            borderColor: '#1e2330',
-            textStyle: { color: '#c8cdd8', fontFamily: 'JetBrains Mono', fontSize: 11 }
-        },
-        grid: { left: 54, right: 24, top: 12, bottom: 36 },
-        xAxis: {
-            type: 'category',
-            boundaryGap: false,
-            axisLine:  { lineStyle: { color: THEME.grid } },
-            axisLabel: { color: THEME.text, fontSize: 10, fontFamily: 'JetBrains Mono' },
-            splitLine: { show: false },
-        },
-        yAxis: {
-            type: 'value',
-            axisLine:  { lineStyle: { color: THEME.grid } },
-            axisLabel: { color: THEME.text, fontSize: 10, fontFamily: 'JetBrains Mono' },
-            splitLine: { lineStyle: { color: THEME.grid, type: 'dashed' } },
-        },
-        series: [{
-            type: 'line',
-            smooth: true,
-            symbol: 'none',
-            lineStyle: { color: seriesColor, width: 2 },
-            areaStyle: {
-                color: {
-                    type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-                    colorStops: [
-                        { offset: 0, color: seriesColor + '40' },
-                        { offset: 1, color: seriesColor + '00' }
-                    ]
-                }
-            },
-        }]
-    };
-}
+let currentMetric = 'soc_pct';
+let currentWindow = 1800;
+let chartData     = [];
 
-const gaugeChart   = echarts.init(document.getElementById('gauge'));
-const chargeChart  = echarts.init(document.getElementById('graph_charge'));
-const currentChart = echarts.init(document.getElementById('graph_current'));
-const voltsChart   = echarts.init(document.getElementById('graph_volts'));
-
-// Current chart — simple single colour, zero reference line
-const currentOpt = baseOpt('current', THEME.amber);
-currentOpt.series[0].markLine = {
-    silent: true,
-    symbol: 'none',
-    lineStyle: { color: THEME.text, type: 'dashed', width: 1 },
-    data: [{ yAxis: 0 }]
-};
-currentChart.setOption(currentOpt);
-chargeChart.setOption(baseOpt('charge', THEME.blue));
-voltsChart.setOption(baseOpt('volts', THEME.amber));
-
-// ── Gauge drawing ─────────────────────────────────────────────────
-
-function fmtRuntime(hours) {
-    if (!isFinite(hours) || hours > 999) return '';
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
-    if (h > 0) return h + 'h ' + String(m).padStart(2,'0') + 'm';
-    return m + 'm';
-}
-
-function drawGauge(value, amps, soc_ah) {
-    const color = value < 30 ? THEME.red : value < 60 ? THEME.amber : THEME.green;
-    const discharging = amps < -0.05;
-    const runtimeHours = discharging ? soc_ah / Math.abs(amps) : null;
-    const runtimeStr = runtimeHours !== null ? fmtRuntime(runtimeHours) : '';
-
-    gaugeChart.setOption({
-        backgroundColor: 'transparent',
-        series: [{
-            type: 'gauge',
-            min: 0, max: 100,
-            radius: '95%',
-            startAngle: 210, endAngle: -30,
-            progress: { show: true, width: 10, itemStyle: { color } },
-            axisLine: { lineStyle: { width: 10, color: [[1, '#1e2330']] } },
-            axisTick: { show: false },
-            splitLine: { show: false },
-            axisLabel: { show: false },
-            pointer: { show: false },
-            title: {
-                show: discharging && runtimeStr !== '',
-                offsetCenter: [0, '55%'],
-                fontSize: 13,
-                fontFamily: 'DM Sans',
-                fontWeight: 700,
-                color: THEME.red,
-            },
-            detail: {
-                valueAnimation: true,
-                formatter: val => val.toFixed(0) + '%',
-                fontSize: 32,
-                fontFamily: 'DM Sans',
-                fontWeight: 800,
-                color: '#fff',
-                offsetCenter: [0, '10%']
-            },
-            data: [{ value, name: discharging && runtimeStr ? 'Runtime: ' + runtimeStr : '' }]
-        }]
-    });
-}
-
-// ── Chart update helpers ──────────────────────────────────────────
-
-function formatTime(ts, windowSeconds) {
-    const d = new Date(ts * 1000);
-    if (windowSeconds <= 7200) {
-        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    } else if (windowSeconds <= 86400) {
-        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else {
-        return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
-               d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const ctx = document.getElementById('main-chart').getContext('2d');
+const mainChart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      data: [],
+      borderColor: CHART_COLORS.soc_pct,
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3,
+      fill: true,
+      backgroundColor: 'rgba(63,185,80,0.07)',
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 300 },
+    plugins: { legend: { display: false }, tooltip: {
+      mode: 'index', intersect: false,
+      backgroundColor: '#161b22',
+      borderColor: '#30363d', borderWidth: 1,
+      titleColor: '#7d8590', bodyColor: '#e6edf3',
+      titleFont: { family: "'Share Tech Mono'" },
+      bodyFont:  { family: "'Share Tech Mono'", size: 11 },
+    }},
+    scales: {
+      x: { display: false },
+      y: {
+        grid: { color: '#21262d' },
+        ticks: { color: '#7d8590', font: { family: "'JetBrains Mono'", size: 12 } }
+      }
     }
-}
-
-function updateCharts(dataPoints, windowSeconds) {
-    if (!dataPoints || dataPoints.length === 0) return;
-
-    const labels  = dataPoints.map(d => formatTime(d.timestamp, windowSeconds));
-    const socVals  = dataPoints.map(d => parseFloat(d.soc_pct));
-    const ampVals  = dataPoints.map(d => parseFloat(d.amps));
-    const voltVals = dataPoints.map(d => parseFloat(d.volts));
-
-    const socMin  = Math.min(...dataPoints.map(d => d.soc_pct));
-    const socYMin = Math.max(0, Math.floor(socMin - 2));
-
-    chargeChart.setOption({
-        xAxis: { data: labels },
-        yAxis: { min: socYMin, max: 100 },
-        series: [{ data: socVals }]
-    });
-
-    const avgAmps = ampVals.reduce((a,b) => a+b, 0) / ampVals.length;
-    const ampColor = avgAmps >= 0 ? THEME.green : THEME.red;
-    currentChart.setOption({
-        xAxis: { data: labels },
-        series: [{
-            data: ampVals,
-            lineStyle: { color: ampColor },
-            areaStyle: {
-                color: {
-                    type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-                    colorStops: [
-                        { offset: 0, color: ampColor + '40' },
-                        { offset: 1, color: ampColor + '00' }
-                    ]
-                }
-            }
-        }]
-    });
-
-    voltsChart.setOption({
-        xAxis: { data: labels },
-        series: [{ data: voltVals }]
-    });
-}
-
-// ── Stats update ──────────────────────────────────────────────────
-
-function updateStats(stats) {
-    console.log('updateStats called with:', stats);
-    if (!stats || !stats.n_samples) { console.warn('updateStats: no data'); return; }
-    try {
-        const fmt = (v, dp) => parseFloat(v).toFixed(dp);
-        const sign = v => parseFloat(v) >= 0 ? '+' : '';
-
-        document.getElementById('s-max').textContent = sign(stats.amps_max) + fmt(stats.amps_max, 2) + ' A';
-        document.getElementById('s-min').textContent = sign(stats.amps_min) + fmt(stats.amps_min, 2) + ' A';
-        document.getElementById('s-avg').textContent = sign(stats.amps_avg) + fmt(stats.amps_avg, 2) + ' A';
-
-        const delta = parseFloat(stats.soc_delta);
-        const deltaEl = document.getElementById('s-soc-delta');
-        deltaEl.textContent = sign(delta) + (delta * 100).toFixed(1) + '%';
-        deltaEl.style.color = delta >= 0 ? THEME.green : THEME.red;
-
-        document.getElementById('s-soc-start').textContent = fmt(stats.soc_start, 1);
-        document.getElementById('s-soc-end').textContent   = fmt(stats.soc_end, 1);
-
-        const netAh = parseFloat(stats.net_ah);
-        const netEl = document.getElementById('m-net-ah');
-        netEl.textContent = sign(netAh) + netAh.toFixed(3);
-        netEl.className = 'metric-value ' + (netAh >= 0 ? 'green' : 'red');
-        console.log('updateStats: DOM updated OK');
-    } catch(e) {
-        console.error('updateStats error:', e);
-    }
-}
-
-// ── Live metric update ────────────────────────────────────────────
-
-function updateLiveMetrics(c) {
-    drawGauge(c.soc_pct, c.amps, c.soc_ah);
-
-    const amps = c.amps;
-    const arrow = document.getElementById('state-arrow');
-    const stateText = document.getElementById('state-text');
-    const pill = document.getElementById('state-pill');
-    if (amps > 0.05) {
-        arrow.textContent = '↑'; arrow.style.color = THEME.green;
-        stateText.textContent = 'Charging'; stateText.style.color = THEME.green;
-    } else if (amps < -0.05) {
-        arrow.textContent = '↓'; arrow.style.color = THEME.red;
-        stateText.textContent = 'Discharging'; stateText.style.color = THEME.red;
-    } else {
-        arrow.textContent = '–'; arrow.style.color = '#5a6070';
-        stateText.textContent = 'Idle'; stateText.style.color = '#5a6070';
-    }
-
-    const ampEl = document.getElementById('m-amps');
-    ampEl.textContent = (amps >= 0 ? '+' : '') + amps.toFixed(2);
-    ampEl.className = 'metric-value ' + (amps > 0.05 ? 'green' : amps < -0.05 ? 'red' : '');
-
-    document.getElementById('m-volts').textContent  = c.volts.toFixed(2);
-    document.getElementById('m-soc').textContent    = c.soc_pct.toFixed(1);
-    document.getElementById('m-soc-ah').textContent = c.soc_ah.toFixed(2);
-
-    const tempEl = document.getElementById('m-temp');
-    tempEl.textContent = c.temp.toFixed(1);
-    tempEl.className = 'metric-value' + (c.temp > 40 ? ' red' : c.temp > 30 ? ' amber' : '');
-}
-
-// ── Time-window state ─────────────────────────────────────────────
-
-let currentWindowSeconds = 86400;
-let isLiveMode = false;
-let lastDataTs = null;
-let historyFetchPending = false;
-
-const WINDOW_LABELS = {
-    1800:     'last 30 min',
-    3600:     'last 1 hour',
-    21600:    'last 6 hours',
-    86400:    'last 24 hours',
-    259200:   'last 3 days',
-    604800:   'last 7 days',
-    2592000:  'last 30 days',
-    7776000:  'last 90 days',
-    31536000: 'last 1 year',
-};
-
-document.querySelectorAll('.tw-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.tw-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const secs = parseInt(btn.dataset.seconds);
-        currentWindowSeconds = secs;
-        isLiveMode = (secs === 1800);
-        document.getElementById('window-label').textContent = WINDOW_LABELS[secs] || `last ${secs}s`;
-        fetchHistorical(secs);
-    });
+  }
 });
 
-// ── Fetch historical data ─────────────────────────────────────────
+function updateChart(metric, points) {
+  const color = CHART_COLORS[metric];
 
-async function fetchHistorical(seconds) {
-    if (historyFetchPending) return;
-    historyFetchPending = true;
-    try {
-        const res = await fetch(`/api/history?seconds=${seconds}&max_points=600`);
-        const json = await res.json();
-        if (json.error) return;
-        updateCharts(json.data, seconds);
-        updateStats(json.stats);
-    } catch (e) {
-        console.error('History fetch error:', e);
-    } finally {
-        historyFetchPending = false;
+  // Choose label format based on the time span of the data
+  let labelFn;
+  if (points.length >= 2) {
+    const spanS = points[points.length-1].timestamp - points[0].timestamp;
+    if (spanS > 5 * 86400) {
+      // > 5 days: show date only
+      labelFn = ts => new Date(ts * 1000).toLocaleDateString([], {month:'short', day:'numeric'});
+    } else if (spanS > 86400) {
+      // 1–5 days: show date + time
+      labelFn = ts => new Date(ts * 1000).toLocaleDateString([], {month:'short', day:'numeric'})
+                    + ' ' + new Date(ts * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    } else {
+      // < 1 day: time only
+      labelFn = ts => new Date(ts * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     }
+  } else {
+    labelFn = ts => new Date(ts * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }
+
+  mainChart.data.labels                      = points.map(p => labelFn(p.timestamp));
+  mainChart.data.datasets[0].data            = points.map(p => p[metric]);
+  mainChart.data.datasets[0].borderColor     = color;
+  mainChart.data.datasets[0].backgroundColor = color + '12';
+  mainChart.data.datasets[0].label           = CHART_LABELS[metric];
+  mainChart.update();
 }
 
-// ── Live polling ──────────────────────────────────────────────────
-
-let staleSince = null;
-
-async function pollLive() {
-    try {
-        const res  = await fetch('/api/status');
-        const json = await res.json();
-        if (json.error) return;
-
-        const c = json.current;
-        updateLiveMetrics(c);
-
-        // Only refresh charts/stats when in live (30-min) mode
-        if (isLiveMode) {
-            updateCharts(json.history, 1800);
-            updateStats(json.stats);
-        }
-
-        // Freshness badge
-        const age = Date.now() / 1000 - c.timestamp;
-        const badge = document.getElementById('live-badge');
-        if (age > 30) {
-            if (!staleSince) staleSince = Date.now();
-            badge.textContent = 'STALE';
-            badge.className = 'stale';
-        } else {
-            staleSince = null;
-            badge.textContent = 'LIVE';
-            badge.className = '';
-        }
-
-        lastDataTs = c.timestamp;
-    } catch (e) {
-        console.error('Poll error:', e);
-    }
-}
-
-// ── Clock ─────────────────────────────────────────────────────────
-
-function tickClock() {
-    document.getElementById('clock').textContent =
-        new Date().toLocaleTimeString();
-}
-setInterval(tickClock, 1000);
-tickClock();
-
-// ── Resize handler ────────────────────────────────────────────────
-
-window.addEventListener('resize', () => {
-    gaugeChart.resize();
-    chargeChart.resize();
-    currentChart.resize();
-    voltsChart.resize();
+// ── Tab buttons (metric) ─────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMetric = btn.dataset.metric;
+    updateChart(currentMetric, chartData);
+  });
 });
 
-// ── Boot ──────────────────────────────────────────────────────────
+// ── Time preset buttons ───────────────────────────────────────────
+document.querySelectorAll('.time-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentWindow  = parseInt(btn.dataset.s);
+    customFromTs   = null;
+    customToTs     = null;
+    document.getElementById('date-range-mode').style.display = 'none';
+    // Sync the date inputs to reflect the new window
+    syncDateInputsToWindow();
+    fetchChart();
+  });
+});
 
-document.getElementById('window-label').textContent = 'last 24 hours';
-pollLive();
-setInterval(pollLive, 2000);
-fetchHistorical(86400);
+// ── Date range picker ─────────────────────────────────────────────
+let customFromTs = null;   // null = use currentWindow (relative)
+let customToTs   = null;
 
-// Refresh historical chart every 2 min when not in live mode
-setInterval(() => {
-    if (!isLiveMode) fetchHistorical(currentWindowSeconds);
-}, 120000);
+function syncDateInputsToWindow() {
+  const now  = new Date();
+  const from = new Date(now.getTime() - currentWindow * 1000);
+  document.getElementById('dt-to').value   = toDatetimeLocal(now);
+  document.getElementById('dt-from').value = toDatetimeLocal(from);
+}
+
+function toDatetimeLocal(d) {
+  // Returns a string in the format required by datetime-local inputs
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+document.getElementById('dt-go').addEventListener('click', () => {
+  const fromVal = document.getElementById('dt-from').value;
+  const toVal   = document.getElementById('dt-to').value;
+  if (!fromVal || !toVal) return;
+
+  customFromTs = Math.floor(new Date(fromVal).getTime() / 1000);
+  customToTs   = Math.floor(new Date(toVal).getTime()   / 1000);
+
+  if (customToTs <= customFromTs) {
+    alert('End time must be after start time.');
+    return;
+  }
+
+  // Deactivate all preset buttons to show we are in custom mode
+  document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('date-range-mode').style.display = '';
+  fetchChart();
+});
+
+// Allow pressing Enter in either date field to trigger Go
+['dt-from','dt-to'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('dt-go').click();
+  });
+});
+
+// ── SOC arc ────────────────────────────────────────────────────────
+const ARC_LEN = 173; // approximate half-circle path length
+function setSocArc(pct) {
+  const fill = document.getElementById('soc-fill');
+  const len  = (pct / 100) * ARC_LEN;
+  fill.setAttribute('stroke-dasharray', `${len} ${ARC_LEN}`);
+  fill.setAttribute('stroke', pct > 50 ? '#3fb950' : pct > 20 ? '#d29922' : '#f85149');
+}
+
+// ── Cell bars ──────────────────────────────────────────────────────
+function renderCells(cells, balance) {
+  const container = document.getElementById('cell-bars');
+  if (!cells || cells.length === 0) {
+    container.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;font-family:var(--mono)">No cell data</span>';
+    return;
+  }
+  const minV = Math.min(...cells);
+  const maxV = Math.max(...cells);
+  const rng  = maxV - minV || 0.001;
+
+  container.innerHTML = '';
+  cells.forEach((v, i) => {
+    const isBalancing = balance && balance[i];
+    const isLow       = v < 3.0;
+    // height: map minV..maxV to 20%..100% of container
+    const heightPct = 20 + ((v - minV) / rng) * 80;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cell-bar-wrap';
+
+    const volt = document.createElement('div');
+    volt.className = 'cell-volt';
+    volt.textContent = v.toFixed(3);
+
+    const bar = document.createElement('div');
+    bar.className = 'cell-bar' + (isBalancing ? ' balancing' : '') + (isLow ? ' low' : '');
+    bar.style.height = heightPct + '%';
+    bar.title = `Cell ${i+1}: ${v.toFixed(3)}V`;
+
+    const num = document.createElement('div');
+    num.className = 'cell-num';
+    num.textContent = i + 1;
+
+    wrap.appendChild(volt);
+    wrap.appendChild(bar);
+    wrap.appendChild(num);
+    container.appendChild(wrap);
+  });
+
+  const statsEl = document.getElementById('cell-stats');
+  if (cells.length > 0) {
+    const delta = (maxV - minV) * 1000;
+    statsEl.textContent = `Min: ${minV.toFixed(3)}V  Max: ${maxV.toFixed(3)}V  Δ: ${delta.toFixed(0)}mV`;
+    statsEl.style.color = delta > 50 ? 'var(--yellow)' : delta > 100 ? 'var(--red)' : 'var(--muted)';
+  }
+}
+
+// ── Temperature probes ─────────────────────────────────────────────
+function renderTemps(temps) {
+  const list = document.getElementById('probe-list');
+  if (!temps || temps.length === 0) {
+    list.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;font-family:var(--mono)">No temp data</span>';
+    return;
+  }
+  list.innerHTML = '';
+  temps.forEach((t, i) => {
+    const pct   = Math.min(100, Math.max(0, (t / 60) * 100));
+    const color = t > 45 ? 'var(--red)' : t > 35 ? 'var(--yellow)' : 'var(--cyan)';
+    const row   = document.createElement('div');
+    row.className = 'probe-row';
+    row.innerHTML = `
+      <span class="probe-label">NTC ${i}</span>
+      <div class="probe-bar-bg">
+        <div class="probe-bar-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+      <span class="probe-val" style="color:${color}">${t.toFixed(1)}°C</span>
+    `;
+    list.appendChild(row);
+  });
+}
+
+// ── Protection alerts ──────────────────────────────────────────────
+function renderAlerts(flags) {
+  const list = document.getElementById('alert-list');
+  if (!flags || flags.length === 0) {
+    list.innerHTML = '<div class="no-alerts">✓ All clear</div>';
+    return;
+  }
+  list.innerHTML = flags.map(f =>
+    `<div class="alert-item"><span class="alert-dot"></span>${f}</div>`
+  ).join('');
+}
+
+// ── Stats row ─────────────────────────────────────────────────────
+function renderStats(stats) {
+  const row = document.getElementById('stats-row');
+  if (!stats || !stats.n_samples) { row.innerHTML = ''; return; }
+  const items = [
+    ['MIN', stats.amps_min + 'A'],
+    ['MAX', stats.amps_max + 'A'],
+    ['AVG', stats.amps_avg + 'A'],
+    ['NET', stats.net_ah + ' Ah'],
+    ['SOC Δ', (stats.soc_delta >= 0 ? '+' : '') + (stats.soc_delta * 100).toFixed(1) + '%'],
+    ['PTS', stats.n_samples],
+  ];
+  row.innerHTML = items.map(([k,v]) =>
+    `<div class="stat-pill">${k}<span>${v}</span></div>`
+  ).join('');
+}
+
+// ── Colour helper for amps ─────────────────────────────────────────
+function ampsClass(a) {
+  if (a > 0)  return 'val-green';
+  if (a < 0)  return 'val-red';
+  return 'val-muted';
+}
+
+// ── Update KPI cards ──────────────────────────────────────────────
+function updateKpis(cur) {
+  const soc = cur.soc_pct ?? 0;
+  setSocArc(soc);
+  document.getElementById('soc-val').textContent = soc.toFixed(1) + '%';
+  document.getElementById('soc-sub').textContent =
+    `${(cur.soc_ah||0).toFixed(1)} Ah / ${(cur.cap_ah||0).toFixed(1)} Ah`;
+
+  const voltsEl = document.getElementById('val-volts');
+  voltsEl.innerHTML = `${(cur.volts||0).toFixed(2)}<span class="card-unit">V</span>`;
+
+  const ampsEl = document.getElementById('val-amps');
+  ampsEl.className = 'card-value ' + ampsClass(cur.amps||0);
+  ampsEl.innerHTML = `${(cur.amps >= 0 ? '+' : '')}${(cur.amps||0).toFixed(2)}<span class="card-unit">A</span>`;
+  document.getElementById('sub-watts').textContent =
+    `${((cur.volts||0)*(cur.amps||0)).toFixed(1)} W  ${cur.switches || ''}`;
+
+  document.getElementById('val-cycles').textContent = cur.cycles ?? '–';
+  document.getElementById('val-rsoc').innerHTML =
+    `${cur.rsoc ?? '–'}<span class="card-unit">%</span>`;
+
+  // Device info panel
+  document.getElementById('di-mac').textContent   = cur.mac_addr   || '–';
+  document.getElementById('di-fw').textContent    = cur.bms_version_str || '–';
+  document.getElementById('di-date').textContent  = cur.prod_date   || '–';
+  document.getElementById('di-cap').textContent   = cur.cap_ah ? `${cur.cap_ah.toFixed(1)} Ah` : '–';
+  document.getElementById('di-cells').textContent = cur.n_cells
+    ? `${cur.n_cells} × ${cur.n_ntc} NTC` : '–';
+}
+
+// ── Fetch device info (hw_version) ────────────────────────────────
+async function fetchDeviceInfo() {
+  try {
+    const res  = await fetch('/api/device');
+    const devs = await res.json();
+    if (devs && devs.length > 0) {
+      document.getElementById('di-hw').textContent = devs[0].hw_version || '–';
+    }
+  } catch (_) {}
+}
+
+// ── Main status poll ─────────────────────────────────────────────
+// fetchStatus only updates KPIs, alerts, temps, cells.
+// It does NOT touch the chart — the chart has its own refresh cycle
+// so that the selected time window and metric are always preserved.
+async function fetchStatus() {
+  try {
+    const res = await fetch('/api/status');
+
+    // Guard: if the server returns HTML instead of JSON (e.g. a proxy
+    // rewriting the URL), catch it cleanly rather than crashing silently.
+    const contentType = res.headers.get('content-type') || '';
+    if (!res.ok || !contentType.includes('application/json')) {
+      console.error('fetchStatus: unexpected response', res.status, contentType);
+      setConnStatus('err', 'api error');
+      return;
+    }
+
+    const data = await res.json();
+
+    if (data.error) {
+      setConnStatus('err', 'no data');
+      return;
+    }
+
+    setConnStatus('ok', 'live');
+    document.getElementById('last-update').textContent =
+      'updated ' + new Date().toLocaleTimeString();
+
+    const cur = data.current;
+    updateKpis(cur);
+    renderAlerts(cur.protection_flags);
+    renderTemps(cur.temps);
+    renderCells(cur.cell_volts, cur.balance_cells);
+
+  } catch (e) {
+    console.error('fetchStatus error:', e);
+    setConnStatus('err', 'offline');
+  }
+}
+
+// fetchChart refreshes the chart using either a custom date range or
+// the current rolling window. Runs on its own timer independently of
+// the KPI poll so the selected window/metric are never overwritten.
+async function fetchChart() {
+  if (customFromTs && customToTs) {
+    await fetchHistoryRange(customFromTs, customToTs);
+  } else {
+    await fetchHistory(currentWindow);
+  }
+}
+
+async function fetchHistory(seconds) {
+  try {
+    const res = await fetch(`/api/history?seconds=${seconds}&max_points=600`);
+    const contentType = res.headers.get('content-type') || '';
+    if (!res.ok || !contentType.includes('application/json')) {
+      console.error('fetchHistory: unexpected response', res.status, contentType);
+      return;
+    }
+    const data = await res.json();
+    chartData  = data.data || [];
+    updateChart(currentMetric, chartData);
+    renderStats(data.stats);
+  } catch (e) {
+    console.error('fetchHistory error:', e);
+  }
+}
+
+async function fetchHistoryRange(fromTs, toTs) {
+  try {
+    const res = await fetch(`/api/history?from_ts=${fromTs}&to_ts=${toTs}&max_points=600`);
+    const contentType = res.headers.get('content-type') || '';
+    if (!res.ok || !contentType.includes('application/json')) {
+      console.error('fetchHistoryRange: unexpected response', res.status, contentType);
+      return;
+    }
+    const data = await res.json();
+    chartData  = data.data || [];
+    updateChart(currentMetric, chartData);
+    renderStats(data.stats);
+  } catch (e) {
+    console.error('fetchHistoryRange error:', e);
+  }
+}
+
+function setConnStatus(cls, text) {
+  const el = document.getElementById('conn-status');
+  el.className = cls;
+  el.textContent = text;
+}
+
+// ── Boot ─────────────────────────────────────────────────────────
+// KPIs poll every 10 s; chart refreshes every 30 s on its own cycle.
+syncDateInputsToWindow();   // pre-fill date picker to match default window
+fetchStatus();
+fetchChart();
+fetchDeviceInfo();
+setInterval(fetchStatus,     10_000);
+setInterval(fetchChart,      30_000);
+setInterval(fetchDeviceInfo, 60_000);
 </script>
 </body>
 </html>
