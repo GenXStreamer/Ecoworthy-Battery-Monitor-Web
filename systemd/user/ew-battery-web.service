@@ -1,0 +1,13 @@
+# Systemd USER file for Ecoworthy Battery Web Component
+# Goes in ~/.config/systemd/user
+
+[Unit]
+Description=Ecoworthy Battery Web
+After=network.target
+
+[Service]
+ExecStart=/path/to/venv/bin/python /path/to/webapp.py -d /path/to/batt.db
+Restart=always
+
+[Install]
+WantedBy=default.target
