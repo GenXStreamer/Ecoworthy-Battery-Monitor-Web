@@ -133,6 +133,4 @@ Summarisation writes into `battery_summary` before deleting raw rows, preserving
 ![Diagram](screenshots/1.png)  
 ![Diagram](screenshots/2.png)  
 ![Diagram](screenshots/3.png)  
-![Diagram](screenshots/4.jpg)
-
 
