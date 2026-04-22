@@ -180,7 +180,7 @@
   }
   .date-go-btn:hover { opacity: 0.85; }
   .date-range-mode { font-size: 0.7rem; color: var(--cyan); font-family: var(--mono); margin-left: auto; }
-  .chart-wrap { position: relative; height: 220px; }
+  .chart-wrap { position: relative; height: 250px; }
 
   /* ── Cell voltage bar chart ── */
   .cells-card { padding: 1rem; }
@@ -424,9 +424,18 @@ const mainChart = new Chart(ctx, {
       bodyFont:  { family: "'Share Tech Mono'", size: 11 },
     }},
     scales: {
-      x: { display: false },
+      x: {
+        display: true,
+        grid:  { color: '#21262d' },
+        ticks: {
+          color:    '#7d8590',
+          font:     { family: "'JetBrains Mono'", size: 11 },
+          maxTicksLimit: 8,
+          maxRotation: 0,
+        }
+      },
       y: {
-        grid: { color: '#21262d' },
+        grid:  { color: '#21262d' },
         ticks: { color: '#7d8590', font: { family: "'JetBrains Mono'", size: 12 } }
       }
     }
