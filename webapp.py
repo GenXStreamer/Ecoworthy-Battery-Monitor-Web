@@ -132,7 +132,7 @@ def get_latest_full():
         con.row_factory = sqlite3.Row
 
         row = con.execute("""
-            SELECT id, ts, volts, amps, soc_ah, cap_ah, soc_pct, temp_c,
+            SELECT id, ts, mac_addr, volts, amps, soc_ah, cap_ah, soc_pct, temp_c,
                    cycles, rsoc, n_cells, n_ntc, bms_version,
                    protection_raw, balance_raw, switches, prod_date
             FROM battery_readings ORDER BY id DESC LIMIT 1
