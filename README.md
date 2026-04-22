@@ -2,7 +2,7 @@
 
 **eco-worthy-battery-logger** rewrite, as there was no Licence. Improvements to BLE stability and added SQLite logging for use with a web interface.
 
-A shout out to the original project for research and inspiration: https://github.com/mike805/eco-worthy-battery-logger, without which this would I would not have bothered!.
+A shout out to the original project for research and inspiration: https://github.com/mike805/eco-worthy-battery-logger, without which I would not have bothered!.
 
 ---
 
