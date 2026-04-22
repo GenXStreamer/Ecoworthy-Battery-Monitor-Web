@@ -30,6 +30,6 @@ systemctl --user daemon-reload
 Enable and start the services:
 
 ```bash
-systemctl --user enable we-battery-poller --now
-systemctl --user enable we-battery-web --now
+systemctl --user enable ew-battery-poller --now
+systemctl --user enable ew-battery-web --now
 ```
