@@ -64,6 +64,22 @@
   #conn-status.err { background: var(--red-dim);   color: var(--red); }
   #last-update { margin-left: auto; font-size: 0.8rem; color: var(--muted); font-family: var(--mono); }
 
+  /* ── Battery selector ── */
+  .bat-select-wrap { display: flex; align-items: center; gap: 0.5rem; }
+  .bat-select-wrap label { font-size: 0.7rem; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+  #bat-select {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    padding: 0.2rem 0.5rem;
+    cursor: pointer;
+    color-scheme: dark;
+  }
+  #bat-select:focus { outline: none; border-color: var(--cyan); }
+
   /* ── Grid layout ── */
   .grid {
     display: grid;
@@ -253,6 +269,61 @@
   .soc-svg-wrap svg { overflow: visible; }
   .soc-center-text { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); font-family: var(--mono); font-size: 1.4rem; line-height: 1; text-align: center; }
   .soc-sub { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; font-family: var(--mono); text-align: center; }
+
+  /* ══ Solar panel ══════════════════════════════════════════════════ */
+  .solar-section {
+    margin-top: 1rem;
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+  }
+  .solar-section-title {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    color: var(--cyan);
+    margin-bottom: 0.8rem;
+    text-transform: uppercase;
+  }
+  .solar-grid-top { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+
+  /* Power split bar */
+  .power-split-card { padding: 1rem; }
+  .power-split-title { font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.6rem; }
+  .power-bar-wrap { position: relative; height: 28px; background: var(--bg3); border-radius: 4px; overflow: hidden; display: flex; }
+  .power-bar-solar { height: 100%; background: var(--yellow); transition: width 0.5s ease; display: flex; align-items: center; justify-content: center; min-width: 0; overflow: hidden; }
+  .power-bar-batt  { height: 100%; background: var(--green);  transition: width 0.5s ease; display: flex; align-items: center; justify-content: center; min-width: 0; overflow: hidden; }
+  .power-bar-label { font-family: var(--mono); font-size: 0.65rem; color: var(--bg); white-space: nowrap; padding: 0 4px; }
+  .power-bar-legend { display: flex; gap: 1rem; margin-top: 0.4rem; font-size: 0.65rem; color: var(--muted); font-family: var(--mono); }
+  .power-bar-legend span { display: flex; align-items: center; gap: 4px; }
+  .power-bar-legend .dot { width: 8px; height: 8px; border-radius: 2px; }
+
+  .power-numbers { display: flex; gap: 1rem; margin-top: 0.6rem; flex-wrap: wrap; }
+  .power-number { display: flex; flex-direction: column; }
+  .power-number-val { font-family: var(--mono); font-size: 1.1rem; }
+  .power-number-lbl { font-size: 0.62rem; color: var(--muted); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+
+  /* Charge state badge */
+  .charge-state {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 2rem;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .charge-state.bulk       { background: #2a2a00; border-color: var(--yellow); color: var(--yellow); }
+  .charge-state.absorption { background: #1a2a00; border-color: #7ec850;       color: #7ec850; }
+  .charge-state.float      { background: #002a1a; border-color: var(--green);  color: var(--green); }
+  .charge-state.off        { background: var(--bg3); }
+  .charge-state.error      { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+
+  /* Solar chart */
+  .solar-chart-wrap { position: relative; height: 180px; }
+  .solar-tab-btns   { display: flex; gap: 0.4rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -260,6 +331,10 @@
 <header>
   <h1>⚡ BATTERY MONITOR</h1>
   <span id="conn-status">connecting…</span>
+  <div class="bat-select-wrap">
+    <label for="bat-select">Battery</label>
+    <select id="bat-select"><option value="">loading…</option></select>
+  </div>
   <span id="last-update"></span>
 </header>
 
@@ -313,6 +388,7 @@
     </div>
     <div class="time-btns">
       <button class="time-btn active" data-s="1800">30m</button>
+      <button class="time-btn" data-s="3600">1h</button>
       <button class="time-btn" data-s="21600">6h</button>
       <button class="time-btn" data-s="86400">24h</button>
       <button class="time-btn" data-s="604800">7d</button>
@@ -377,6 +453,98 @@
   </div>
 </div>
 
+<!-- ══ Solar / MPPT section ══════════════════════════════════════════ -->
+<div class="solar-section" id="solar-section" style="display:none">
+  <div class="solar-section-title">☀ Solar / MPPT Controller</div>
+
+  <!-- KPI row -->
+  <div class="grid grid-top solar-grid-top">
+    <div class="card">
+      <div class="card-label">Solar Power</div>
+      <div class="card-value val-yellow" id="sol-solar-w">–<span class="card-unit">W</span></div>
+      <div class="card-sub" id="sol-yield">Yield today: –</div>
+    </div>
+    <div class="card">
+      <div class="card-label">To Battery</div>
+      <div class="card-value val-green" id="sol-batt-w">–<span class="card-unit">W</span></div>
+      <div class="card-sub" id="sol-batt-a">– A</div>
+    </div>
+    <div class="card">
+      <div class="card-label">To Load</div>
+      <div class="card-value val-cyan" id="sol-load-w">–<span class="card-unit">W</span></div>
+      <div class="card-sub">direct from solar</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Charge State</div>
+      <div style="margin-top:0.5rem"><span class="charge-state" id="sol-state">–</span></div>
+      <div class="card-sub" id="sol-error" style="color:var(--red);margin-top:0.3rem"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Battery Voltage</div>
+      <div class="card-value val-blue" id="sol-batt-v">–<span class="card-unit">V</span></div>
+      <div class="card-sub">at MPPT output</div>
+    </div>
+  </div>
+
+  <!-- Power split bar -->
+  <div class="card power-split-card" style="margin-top:1rem">
+    <div class="power-split-title">Power Split — Solar Output</div>
+    <div class="power-bar-wrap">
+      <div class="power-bar-solar" id="pbar-batt" style="width:50%">
+        <span class="power-bar-label" id="pbar-batt-lbl">→ Battery</span>
+      </div>
+      <div class="power-bar-batt" id="pbar-load" style="width:50%">
+        <span class="power-bar-label" id="pbar-load-lbl">→ Load</span>
+      </div>
+    </div>
+    <div class="power-bar-legend">
+      <span><span class="dot" style="background:var(--yellow)"></span>To battery</span>
+      <span><span class="dot" style="background:var(--green)"></span>To load (direct)</span>
+    </div>
+    <div class="power-numbers">
+      <div class="power-number">
+        <span class="power-number-val val-yellow" id="pn-solar">– W</span>
+        <span class="power-number-lbl">Solar in</span>
+      </div>
+      <div class="power-number">
+        <span class="power-number-val val-green" id="pn-batt">– W</span>
+        <span class="power-number-lbl">→ Battery</span>
+      </div>
+      <div class="power-number">
+        <span class="power-number-val val-cyan" id="pn-load">– W</span>
+        <span class="power-number-lbl">→ Load</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Solar chart -->
+  <div class="card chart-card" style="margin-top:1rem">
+    <div class="solar-tab-btns">
+      <button class="tab-btn active" data-solar-metric="solar_power_w">Solar W</button>
+      <button class="tab-btn" data-solar-metric="battery_charging_watts">→ Battery W</button>
+      <button class="tab-btn" data-solar-metric="load_watts">→ Load W</button>
+      <button class="tab-btn" data-solar-metric="battery_voltage_v">Batt V</button>
+      <button class="tab-btn" data-solar-metric="yield_today_wh">Yield Wh</button>
+    </div>
+    <div class="time-btns" id="solar-time-btns">
+      <button class="time-btn active" data-solar-s="1800">30m</button>
+      <button class="time-btn" data-solar-s="3600">1h</button>
+      <button class="time-btn" data-solar-s="21600">6h</button>
+      <button class="time-btn" data-solar-s="86400">24h</button>
+      <button class="time-btn" data-solar-s="604800">7d</button>
+      <button class="time-btn" data-solar-s="2592000">30d</button>
+      <button class="time-btn" data-solar-s="5184000">60d</button>
+      <button class="time-btn" data-solar-s="15552000">6mo</button>
+      <button class="time-btn" data-solar-s="31536000">1yr</button>
+
+    </div>
+    <div class="solar-chart-wrap">
+      <canvas id="solar-chart"></canvas>
+    </div>
+    <div class="stats-row" id="solar-stats-row"></div>
+  </div>
+</div>
+
 <script>
 // ── Chart setup ──────────────────────────────────────────────────
 const CHART_COLORS = {
@@ -394,6 +562,7 @@ const CHART_LABELS = {
 
 let currentMetric = 'soc_pct';
 let currentWindow = 1800;
+let currentMac    = '';    // empty = most-recent (single battery mode)
 let chartData     = [];
 
 const ctx = document.getElementById('main-chart').getContext('2d');
@@ -687,16 +856,56 @@ function updateKpis(cur) {
     ? `${cur.n_cells} × ${cur.n_ntc} NTC` : '–';
 }
 
-// ── Fetch device info (hw_version) ────────────────────────────────
+// ── Fetch device list & populate dropdown ────────────────────────
 async function fetchDeviceInfo() {
   try {
     const res  = await fetch('/api/device');
     const devs = await res.json();
-    if (devs && devs.length > 0) {
-      document.getElementById('di-hw').textContent = devs[0].hw_version || '–';
+    if (!devs || devs.length === 0) return;
+
+    const sel = document.getElementById('bat-select');
+    const prev = sel.value;
+
+    sel.innerHTML = '';
+    if (devs.length > 1) {
+      const all = document.createElement('option');
+      all.value = '';
+      all.textContent = 'All batteries';
+      sel.appendChild(all);
     }
+    devs.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.mac_addr;
+      // Label: hw_version if known, else last 8 chars of MAC
+      const label = d.hw_version
+        ? `${d.hw_version} (${d.mac_addr})`
+        : d.mac_addr;
+      opt.textContent = label;
+      sel.appendChild(opt);
+    });
+
+    // Restore previous selection if still present, else pick first battery
+    const match = [...sel.options].find(o => o.value === prev);
+    if (match) {
+      sel.value = prev;
+    } else {
+      sel.value = devs.length === 1 ? devs[0].mac_addr : '';
+    }
+    currentMac = sel.value;
+
+    // Update device info panel for the selected battery
+    const selected = devs.find(d => d.mac_addr === currentMac) || devs[0];
+    document.getElementById('di-hw').textContent = selected.hw_version || '–';
+
   } catch (_) {}
 }
+
+// ── Battery selector change ───────────────────────────────────────
+document.getElementById('bat-select').addEventListener('change', function() {
+  currentMac = this.value;
+  fetchStatus();
+  fetchChart();
+});
 
 // ── Main status poll ─────────────────────────────────────────────
 // fetchStatus only updates KPIs, alerts, temps, cells.
@@ -704,7 +913,8 @@ async function fetchDeviceInfo() {
 // so that the selected time window and metric are always preserved.
 async function fetchStatus() {
   try {
-    const res = await fetch('/api/status');
+    const mac = currentMac ? `?mac=${encodeURIComponent(currentMac)}` : '';
+    const res = await fetch(`/api/status${mac}`);
 
     // Guard: if the server returns HTML instead of JSON (e.g. a proxy
     // rewriting the URL), catch it cleanly rather than crashing silently.
@@ -751,7 +961,8 @@ async function fetchChart() {
 
 async function fetchHistory(seconds) {
   try {
-    const res = await fetch(`/api/history?seconds=${seconds}&max_points=600`);
+    const macParam = currentMac ? `&mac=${encodeURIComponent(currentMac)}` : '';
+    const res = await fetch(`/api/history?seconds=${seconds}&max_points=600${macParam}`);
     const contentType = res.headers.get('content-type') || '';
     if (!res.ok || !contentType.includes('application/json')) {
       console.error('fetchHistory: unexpected response', res.status, contentType);
@@ -768,7 +979,8 @@ async function fetchHistory(seconds) {
 
 async function fetchHistoryRange(fromTs, toTs) {
   try {
-    const res = await fetch(`/api/history?from_ts=${fromTs}&to_ts=${toTs}&max_points=600`);
+    const macParam2 = currentMac ? `&mac=${encodeURIComponent(currentMac)}` : '';
+    const res = await fetch(`/api/history?from_ts=${fromTs}&to_ts=${toTs}&max_points=600${macParam2}`);
     const contentType = res.headers.get('content-type') || '';
     if (!res.ok || !contentType.includes('application/json')) {
       console.error('fetchHistoryRange: unexpected response', res.status, contentType);
@@ -789,15 +1001,222 @@ function setConnStatus(cls, text) {
   el.textContent = text;
 }
 
+// ══ Solar ════════════════════════════════════════════════════════
+
+const SOLAR_CHART_COLORS = {
+  solar_power_w:          '#d29922',
+  battery_charging_watts: '#3fb950',
+  load_watts:             '#39c5cf',
+  battery_voltage_v:      '#58a6ff',
+  yield_today_wh:         '#a371f7',
+};
+
+let currentSolarMetric  = 'solar_power_w';
+let currentSolarWindow  = 1800;
+let currentSolarAddress = '';
+let solarChartData      = [];
+
+// Init solar chart
+const solarCtx = document.getElementById('solar-chart').getContext('2d');
+const solarChart = new Chart(solarCtx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      data: [],
+      borderColor: SOLAR_CHART_COLORS.solar_power_w,
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3,
+      fill: true,
+      backgroundColor: 'rgba(210,153,34,0.08)',
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 300 },
+    plugins: { legend: { display: false }, tooltip: {
+      mode: 'index', intersect: false,
+      backgroundColor: '#161b22', borderColor: '#30363d', borderWidth: 1,
+      titleColor: '#7d8590', bodyColor: '#e6edf3',
+      titleFont: { family: "'JetBrains Mono'" },
+      bodyFont:  { family: "'JetBrains Mono'", size: 11 },
+    }},
+    scales: {
+      x: {
+        display: true,
+        grid:  { color: '#21262d' },
+        ticks: { color: '#7d8590', font: { family: "'JetBrains Mono'", size: 11 },
+                 maxTicksLimit: 8, maxRotation: 0 }
+      },
+      y: { grid: { color: '#21262d' },
+           ticks: { color: '#7d8590', font: { family: "'JetBrains Mono'", size: 11 } } }
+    }
+  }
+});
+
+function updateSolarChart(metric, points) {
+  const color = SOLAR_CHART_COLORS[metric] || '#58a6ff';
+  let labelFn;
+  if (points.length >= 2) {
+    const spanS = points[points.length-1].ts - points[0].ts;
+    if (spanS > 5 * 86400)
+      labelFn = ts => new Date(ts * 1000).toLocaleDateString([], {month:'short', day:'numeric'});
+    else if (spanS > 86400)
+      labelFn = ts => new Date(ts * 1000).toLocaleDateString([], {month:'short', day:'numeric'})
+                    + ' ' + new Date(ts * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    else
+      labelFn = ts => new Date(ts * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  } else {
+    labelFn = ts => new Date(ts * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  }
+  solarChart.data.labels                      = points.map(p => labelFn(p.ts));
+  solarChart.data.datasets[0].data            = points.map(p => p[metric]);
+  solarChart.data.datasets[0].borderColor     = color;
+  solarChart.data.datasets[0].backgroundColor = color + '14';
+  solarChart.update();
+}
+
+function renderPowerSplit(cur) {
+  const solar  = cur.solar_power_w         || 0;
+  const battW  = cur.battery_charging_watts || 0;
+  const loadW  = cur.load_watts             || 0;
+
+  const battPct = solar > 0 ? Math.max(0, Math.min(100, (battW / solar) * 100)) : 50;
+  const loadPct = 100 - battPct;
+
+  document.getElementById('pbar-batt').style.width = battPct + '%';
+  document.getElementById('pbar-load').style.width = loadPct + '%';
+  document.getElementById('pbar-batt-lbl').textContent = battPct > 15 ? `${battPct.toFixed(0)}% Batt` : '';
+  document.getElementById('pbar-load-lbl').textContent = loadPct > 15 ? `${loadPct.toFixed(0)}% Load` : '';
+
+  document.getElementById('pn-solar').textContent = `${solar.toFixed(0)} W`;
+  document.getElementById('pn-batt').textContent  = `${battW.toFixed(0)} W`;
+  document.getElementById('pn-load').textContent  = `${loadW.toFixed(0)} W`;
+}
+
+function renderSolarStats(stats) {
+  const row = document.getElementById('solar-stats-row');
+  if (!stats || !stats.n_samples) { row.innerHTML = ''; return; }
+  const items = [
+    ['PEAK',     (stats.solar_max_w  ?? '–') + 'W'],
+    ['AVG',      (stats.solar_avg_w  ?? '–') + 'W'],
+    ['LOAD MAX', (stats.load_max_w   ?? '–') + 'W'],
+    ['WINDOW',   (stats.window_wh    ?? '–') + ' Wh'],
+    ['TODAY',    (stats.yield_today_wh ?? '–') + ' Wh'],
+  ];
+  row.innerHTML = items.map(([k,v]) =>
+    `<div class="stat-pill">${k}<span>${v}</span></div>`
+  ).join('');
+}
+
+async function fetchSolarStatus() {
+  try {
+    const addrParam = currentSolarAddress ? `?address=${encodeURIComponent(currentSolarAddress)}` : '';
+    const res = await fetch(`/api/solar/status${addrParam}`);
+    const ct  = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('application/json')) return;
+    const data = await res.json();
+    if (data.error) return;
+
+    const cur = data.current;
+    const solar = cur.solar_power_w ?? 0;
+    const battW = cur.battery_charging_watts ?? 0;
+    const loadW = cur.load_watts ?? 0;
+    const state = cur.charge_state || '–';
+    const error = cur.charger_error;
+
+    document.getElementById('sol-solar-w').innerHTML = `${solar.toFixed(0)}<span class="card-unit">W</span>`;
+    document.getElementById('sol-yield').textContent  = `Yield today: ${cur.yield_today_wh ?? '–'} Wh`;
+    document.getElementById('sol-batt-w').innerHTML   = `${battW.toFixed(0)}<span class="card-unit">W</span>`;
+    document.getElementById('sol-batt-a').textContent = `${(cur.battery_charging_amps ?? 0).toFixed(1)} A`;
+    document.getElementById('sol-load-w').innerHTML   = `${loadW.toFixed(0)}<span class="card-unit">W</span>`;
+    document.getElementById('sol-batt-v').innerHTML   = `${(cur.battery_voltage_v ?? 0).toFixed(2)}<span class="card-unit">V</span>`;
+
+    const stateEl = document.getElementById('sol-state');
+    stateEl.textContent = state;
+    stateEl.className   = 'charge-state ' + state.toLowerCase();
+
+    const errEl = document.getElementById('sol-error');
+    const hasError = error && !['no_error','ok',''].includes(error.toLowerCase());
+    errEl.textContent = hasError ? `⚠ ${error}` : '';
+
+    renderPowerSplit(cur);
+
+  } catch (e) {
+    console.error('fetchSolarStatus:', e);
+  }
+}
+
+async function fetchSolarChart() {
+  try {
+    const addrParam = currentSolarAddress ? `&address=${encodeURIComponent(currentSolarAddress)}` : '';
+    const res  = await fetch(`/api/solar/history?seconds=${currentSolarWindow}&max_points=600${addrParam}`);
+    const ct   = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('application/json')) return;
+    const data = await res.json();
+    solarChartData = data.data || [];
+    updateSolarChart(currentSolarMetric, solarChartData);
+    renderSolarStats(data.stats);
+  } catch (e) {
+    console.error('fetchSolarChart:', e);
+  }
+}
+
+async function fetchSolarDevices() {
+  try {
+    const res  = await fetch('/api/solar/devices');
+    const ct   = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('application/json')) return;
+    const devs = await res.json();
+    if (!devs || devs.length === 0) return;
+
+    // Show the solar section now that we know devices exist
+    document.getElementById('solar-section').style.display = '';
+
+    // If only one device, set it as current automatically
+    if (devs.length === 1 && !currentSolarAddress) {
+      currentSolarAddress = devs[0].address;
+    }
+  } catch (_) {}
+}
+
+// Solar metric tab buttons
+document.querySelectorAll('[data-solar-metric]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-solar-metric]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentSolarMetric = btn.dataset.solarMetric;
+    updateSolarChart(currentSolarMetric, solarChartData);
+  });
+});
+
+// Solar time buttons
+document.querySelectorAll('[data-solar-s]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-solar-s]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentSolarWindow = parseInt(btn.dataset.solarS);
+    fetchSolarChart();
+  });
+});
+
 // ── Boot ─────────────────────────────────────────────────────────
 // KPIs poll every 10 s; chart refreshes every 30 s on its own cycle.
 syncDateInputsToWindow();   // pre-fill date picker to match default window
 fetchStatus();
 fetchChart();
 fetchDeviceInfo();
-setInterval(fetchStatus,     10_000);
-setInterval(fetchChart,      30_000);
-setInterval(fetchDeviceInfo, 60_000);
+fetchSolarDevices();
+fetchSolarStatus();
+fetchSolarChart();
+setInterval(fetchStatus,      10_000);
+setInterval(fetchChart,       30_000);
+setInterval(fetchDeviceInfo,  60_000);
+setInterval(fetchSolarStatus, 10_000);
+setInterval(fetchSolarChart,  30_000);
+setInterval(fetchSolarDevices,60_000);
 </script>
 </body>
 </html>
