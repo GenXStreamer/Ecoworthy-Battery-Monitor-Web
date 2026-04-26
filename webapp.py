@@ -108,16 +108,25 @@ def summary_rows_to_dicts(rows):
     ]
 
 
-def get_latest():
+def get_latest(mac=None):
     try:
         con = sqlite3.connect(DB_PATH)
         con.row_factory = sqlite3.Row
-        row = con.execute("""
-            SELECT ts, volts, amps, soc_ah, soc_pct, temp_c,
-                   cycles, rsoc, n_cells, n_ntc,
-                   protection_raw, balance_raw, switches, bms_version
-            FROM battery_readings ORDER BY id DESC LIMIT 1
-        """).fetchone()
+        if mac:
+            row = con.execute("""
+                SELECT ts, volts, amps, soc_ah, soc_pct, temp_c,
+                       cycles, rsoc, n_cells, n_ntc,
+                       protection_raw, balance_raw, switches, bms_version
+                FROM battery_readings WHERE mac_addr = ?
+                ORDER BY id DESC LIMIT 1
+            """, (mac,)).fetchone()
+        else:
+            row = con.execute("""
+                SELECT ts, volts, amps, soc_ah, soc_pct, temp_c,
+                       cycles, rsoc, n_cells, n_ntc,
+                       protection_raw, balance_raw, switches, bms_version
+                FROM battery_readings ORDER BY id DESC LIMIT 1
+            """).fetchone()
         con.close()
         return db_rows_to_dicts([row])[0] if row else None
     except Exception as e:
@@ -125,18 +134,27 @@ def get_latest():
         return None
 
 
-def get_latest_full():
+def get_latest_full(mac=None):
     """Return the most recent reading with all NTC temps and cell voltages."""
     try:
         con = sqlite3.connect(DB_PATH)
         con.row_factory = sqlite3.Row
 
-        row = con.execute("""
-            SELECT id, ts, mac_addr, volts, amps, soc_ah, cap_ah, soc_pct, temp_c,
-                   cycles, rsoc, n_cells, n_ntc, bms_version,
-                   protection_raw, balance_raw, switches, prod_date
-            FROM battery_readings ORDER BY id DESC LIMIT 1
-        """).fetchone()
+        if mac:
+            row = con.execute("""
+                SELECT id, ts, mac_addr, volts, amps, soc_ah, cap_ah, soc_pct, temp_c,
+                       cycles, rsoc, n_cells, n_ntc, bms_version,
+                       protection_raw, balance_raw, switches, prod_date
+                FROM battery_readings WHERE mac_addr = ?
+                ORDER BY id DESC LIMIT 1
+            """, (mac,)).fetchone()
+        else:
+            row = con.execute("""
+                SELECT id, ts, mac_addr, volts, amps, soc_ah, cap_ah, soc_pct, temp_c,
+                       cycles, rsoc, n_cells, n_ntc, bms_version,
+                       protection_raw, balance_raw, switches, prod_date
+                FROM battery_readings ORDER BY id DESC LIMIT 1
+            """).fetchone()
 
         if not row:
             con.close()
@@ -189,7 +207,7 @@ RAW_CUTOFF_DAYS = 30
 RAW_CUTOFF_S    = RAW_CUTOFF_DAYS * 86_400
 
 
-def query_window(seconds=None, max_points=600, from_ts=None, to_ts=None):
+def query_window(seconds=None, max_points=600, from_ts=None, to_ts=None, **kwargs):
     """
     Fetch a time window of battery readings.
 
@@ -216,27 +234,47 @@ def query_window(seconds=None, max_points=600, from_ts=None, to_ts=None):
         raw_start = max(cutoff, now - RAW_CUTOFF_S)
 
         # ── Raw rows ──────────────────────────────────────────────
-        raw_rows = con.execute("""
-            SELECT ts, volts, amps, soc_ah, soc_pct, temp_c,
-                   cycles, rsoc, n_cells, protection_raw, balance_raw
-            FROM battery_readings
-            WHERE ts >= ? AND ts <= ?
-            ORDER BY ts ASC
-        """, (raw_start, window_end)).fetchall()
+        mac = kwargs.get('mac')
+        if mac:
+            raw_rows = con.execute("""
+                SELECT ts, volts, amps, soc_ah, soc_pct, temp_c,
+                       cycles, rsoc, n_cells, protection_raw, balance_raw
+                FROM battery_readings
+                WHERE ts >= ? AND ts <= ? AND mac_addr = ?
+                ORDER BY ts ASC
+            """, (raw_start, window_end, mac)).fetchall()
+        else:
+            raw_rows = con.execute("""
+                SELECT ts, volts, amps, soc_ah, soc_pct, temp_c,
+                       cycles, rsoc, n_cells, protection_raw, balance_raw
+                FROM battery_readings
+                WHERE ts >= ? AND ts <= ?
+                ORDER BY ts ASC
+            """, (raw_start, window_end)).fetchall()
         points.extend(db_rows_to_dicts(raw_rows))
 
         # ── Summary rows (only when window extends into summarised history) ──
         if cutoff < now - RAW_CUTOFF_S:
             # Use daily buckets for spans > 60 days, hourly otherwise
             bucket = 'day' if span > 60 * 86_400 else 'hour'
-            summary_rows = con.execute("""
-                SELECT ts_start, ts_end, bucket, mac_addr,
-                       volts_avg, amps_avg, amps_min, amps_max,
-                       soc_avg, temp_avg, net_ah, n_samples
-                FROM battery_summary
-                WHERE ts_start >= ? AND ts_end <= ? AND bucket = ?
-                ORDER BY ts_start ASC
-            """, (cutoff, min(window_end, now - RAW_CUTOFF_S), bucket)).fetchall()
+            if mac:
+                summary_rows = con.execute("""
+                    SELECT ts_start, ts_end, bucket, mac_addr,
+                           volts_avg, amps_avg, amps_min, amps_max,
+                           soc_avg, temp_avg, net_ah, n_samples
+                    FROM battery_summary
+                    WHERE ts_start >= ? AND ts_end <= ? AND bucket = ? AND mac_addr = ?
+                    ORDER BY ts_start ASC
+                """, (cutoff, min(window_end, now - RAW_CUTOFF_S), bucket, mac)).fetchall()
+            else:
+                summary_rows = con.execute("""
+                    SELECT ts_start, ts_end, bucket, mac_addr,
+                           volts_avg, amps_avg, amps_min, amps_max,
+                           soc_avg, temp_avg, net_ah, n_samples
+                    FROM battery_summary
+                    WHERE ts_start >= ? AND ts_end <= ? AND bucket = ?
+                    ORDER BY ts_start ASC
+                """, (cutoff, min(window_end, now - RAW_CUTOFF_S), bucket)).fetchall()
             points = summary_rows_to_dicts(summary_rows) + points
 
         con.close()
@@ -287,6 +325,112 @@ def compute_stats(data_points):
     }
 
 
+# ── Solar helpers ──────────────────────────────────────────────────
+
+def get_solar_latest(address=None):
+    try:
+        con = sqlite3.connect(DB_PATH)
+        con.row_factory = sqlite3.Row
+        if address:
+            row = con.execute("""
+                SELECT * FROM solar_readings
+                WHERE address = ?
+                ORDER BY id DESC LIMIT 1
+            """, (address,)).fetchone()
+        else:
+            row = con.execute("""
+                SELECT * FROM solar_readings
+                ORDER BY id DESC LIMIT 1
+            """).fetchone()
+        con.close()
+        return dict(row) if row else None
+    except Exception as e:
+        print("Error reading solar DB:", e)
+        return None
+
+
+def get_solar_devices():
+    try:
+        con = sqlite3.connect(DB_PATH)
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            "SELECT * FROM solar_device_info ORDER BY last_seen DESC"
+        ).fetchall()
+        con.close()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print("Error reading solar devices:", e)
+        return []
+
+
+def query_solar_window(seconds=None, max_points=600,
+                       from_ts=None, to_ts=None, address=None):
+    now = time.time()
+    if from_ts is not None and to_ts is not None:
+        cutoff     = from_ts
+        window_end = to_ts
+    else:
+        cutoff     = now - (seconds or 1800)
+        window_end = now
+
+    try:
+        con = sqlite3.connect(DB_PATH)
+        con.row_factory = sqlite3.Row
+
+        params = [cutoff, window_end]
+        addr_clause = ''
+        if address:
+            addr_clause = 'AND address = ?'
+            params.append(address)
+
+        rows = con.execute(f"""
+            SELECT ts, solar_power_w, battery_voltage_v,
+                   battery_charging_amps, battery_charging_watts,
+                   load_watts, charge_state, charger_error, yield_today_wh
+            FROM solar_readings
+            WHERE ts >= ? AND ts <= ? {addr_clause}
+            ORDER BY ts ASC
+        """, params).fetchall()
+        con.close()
+
+        points = [dict(r) for r in rows]
+        if len(points) > max_points:
+            step   = len(points) / max_points
+            points = [points[int(i * step)] for i in range(max_points)]
+        return points
+
+    except Exception as e:
+        print("Error querying solar window:", e)
+        return []
+
+
+def compute_solar_stats(points):
+    if not points:
+        return {}
+    solar  = [p['solar_power_w']          for p in points if p['solar_power_w']  is not None]
+    batt_w = [p['battery_charging_watts'] for p in points if p['battery_charging_watts'] is not None]
+    load   = [p['load_watts']             for p in points if p['load_watts']      is not None]
+    last   = points[-1]
+
+    total_wh = 0.0
+    for i in range(1, len(points)):
+        if points[i]['solar_power_w'] is not None and points[i-1]['solar_power_w'] is not None:
+            dt_h      = (points[i]['ts'] - points[i-1]['ts']) / 3600.0
+            avg_solar = (points[i]['solar_power_w'] + points[i-1]['solar_power_w']) / 2.0
+            total_wh += avg_solar * dt_h
+
+    return {
+        "solar_max_w":    round(max(solar),         1) if solar  else None,
+        "solar_avg_w":    round(sum(solar)/len(solar), 1) if solar else None,
+        "batt_max_w":     round(max(batt_w),        1) if batt_w else None,
+        "load_max_w":     round(max(load),          1) if load   else None,
+        "load_avg_w":     round(sum(load)/len(load),1) if load   else None,
+        "yield_today_wh": last.get('yield_today_wh'),
+        "window_wh":      round(total_wh,           2),
+        "n_samples":      len(points),
+    }
+
+
 # ── Routes ─────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -296,16 +440,13 @@ def index():
 
 @app.route("/api/status")
 def status():
-    data = get_latest_full()
+    mac  = request.args.get("mac") or None
+    data = get_latest_full(mac=mac)
     if not data:
         return jsonify({"error": "no data"})
 
-    window = query_window(1800)
-
     return jsonify({
         "current": data,
-        "history": window,
-        "stats":   compute_stats(window),
     })
 
 
@@ -318,13 +459,15 @@ def historical():
         from_ts = request.args.get("from_ts")
         to_ts   = request.args.get("to_ts")
 
+        mac = request.args.get("mac") or None
+
         if from_ts is not None and to_ts is not None:
             # Absolute date range mode
             from_ts = float(from_ts)
             to_ts   = float(to_ts)
             if to_ts <= from_ts:
                 return jsonify({"error": "to_ts must be after from_ts"}), 400
-            points = query_window(max_points=max_points, from_ts=from_ts, to_ts=to_ts)
+            points = query_window(max_points=max_points, from_ts=from_ts, to_ts=to_ts, mac=mac)
             return jsonify({
                 "from_ts": from_ts,
                 "to_ts":   to_ts,
@@ -335,7 +478,7 @@ def historical():
             # Rolling window mode
             seconds = int(request.args.get("seconds", 1800))
             seconds = max(60, min(seconds, 60 * 60 * 24 * 365 * 2))
-            points  = query_window(seconds=seconds, max_points=max_points)
+            points  = query_window(seconds=seconds, max_points=max_points, mac=mac)
             return jsonify({
                 "window_seconds": seconds,
                 "data":  points,
@@ -350,6 +493,52 @@ def historical():
 def device_info():
     """Return hardware version, production date, etc. for all known devices."""
     return jsonify(get_device_info())
+
+
+@app.route("/api/solar/status")
+def solar_status():
+    address = request.args.get("address") or None
+    data    = get_solar_latest(address=address)
+    if not data:
+        return jsonify({"error": "no solar data"})
+    return jsonify({"current": data})
+
+
+@app.route("/api/solar/history")
+def solar_history():
+    try:
+        max_points = int(request.args.get("max_points", 600))
+        max_points = max(10, min(max_points, 2000))
+        address    = request.args.get("address") or None
+
+        from_ts = request.args.get("from_ts")
+        to_ts   = request.args.get("to_ts")
+
+        if from_ts is not None and to_ts is not None:
+            from_ts = float(from_ts)
+            to_ts   = float(to_ts)
+            if to_ts <= from_ts:
+                return jsonify({"error": "to_ts must be after from_ts"}), 400
+            points = query_solar_window(max_points=max_points,
+                                        from_ts=from_ts, to_ts=to_ts,
+                                        address=address)
+            return jsonify({"from_ts": from_ts, "to_ts": to_ts,
+                            "data": points, "stats": compute_solar_stats(points)})
+        else:
+            seconds = int(request.args.get("seconds", 1800))
+            seconds = max(60, min(seconds, 60 * 60 * 24 * 365 * 2))
+            points  = query_solar_window(seconds=seconds, max_points=max_points,
+                                         address=address)
+            return jsonify({"window_seconds": seconds,
+                            "data": points, "stats": compute_solar_stats(points)})
+
+    except (ValueError, TypeError):
+        return jsonify({"error": "invalid parameters"}), 400
+
+
+@app.route("/api/solar/devices")
+def solar_devices():
+    return jsonify(get_solar_devices())
 
 
 if __name__ == "__main__":
