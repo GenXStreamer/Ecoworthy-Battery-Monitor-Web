@@ -14,6 +14,10 @@ This project has three components:
 - `webapp.py` – Flask web interface for viewing stored data
 - `maintain_db.py` – database retention and summarisation tool
 
+There is a forth component `victron-poller.py`, which is optional. If you have a Victron MTTP controller this may prove useful.
+It polls the controller and adds the data to the database, providing some summary information in the web interface. This informaton is only displayed if the
+data is accessible in the battery DB so will not affect the collection of data from the ecoworthy battery. 
+
 ---
 
 ## ecoworthy-battery-monitor.py
@@ -133,4 +137,44 @@ Summarisation writes into `battery_summary` before deleting raw rows, preserving
 ![Diagram](screenshots/1.png)  
 ![Diagram](screenshots/2.png)  
 ![Diagram](screenshots/3.png)  
+
+
+## victron-monitor.py
+
+Requires : victron-ble 
+https://github.com/keshavdv/victron-ble/
+
+Follow the instructions listed in this project about retrieving the MAC address and encryption key
+for the device
+
+Tested on Victron 100/30 MTTP Controller only
+
+### Usage
+
+```bash
+/path/to/env/bin/python victron-poller.py [-h] -a ADDRESS -k KEY [-d FILE] [-i INTERVAL]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-h`, `--help` | show this help message and exit |
+| `-a MAC`, `--address MAC` | Controller Bluetooth MAC address (e.g. `e6:48:60:86:5f:74`) |
+| `-k KEY`, `--k KEY` | Instant Readout encryption key (hex string) |
+| `-i INTERVAL`, `--interval INTERVAL` | Poll interval in seconds (default: 10) |
+| `-d FILE`, `--db FILE` | Store readings in this SQLite database |
+
+
+### Example
+
+```bash
+/path/to/env/bin/python victron-poller.py \
+  -a e6:48:60:86:5f:74 \
+  -k 77c7a452364b4fe7de1d0d407949797f
+  -i 10 \
+  -d /path/to/database/batt.db -v
+```
+
+---
 
