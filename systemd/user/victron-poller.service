@@ -1,0 +1,10 @@
+[Unit]
+Description=Victron MTTP Poller
+After=network-online.target bluetooth.service
+
+[Service]
+ExecStart=/path/to/venv/bin/python /path/to/victron-monitor.py -a MAC -k KEY -d /path/to/db -i 10
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
