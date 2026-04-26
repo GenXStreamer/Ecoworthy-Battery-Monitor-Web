@@ -12,7 +12,7 @@ Requires:
 Usage:
     python victron-monitor.py \\
         -a e6:48:60:86:5f:74 \\
-        -k 5cc877b465d65fa970128d5ecabb456b \\
+        -k 77c7a452364b4fe7de1d0d407949797f \\
         -d /home/dan/BatMon/batt.db \\
         -i 10
 
