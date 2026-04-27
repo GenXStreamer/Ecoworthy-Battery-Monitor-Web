@@ -171,7 +171,7 @@ Tested on Victron 100/30 MTTP Controller only
 ```bash
 /path/to/env/bin/python victron-monitor.py \
   -a e6:48:60:86:5f:74 \
-  -k 77c7a452364b4fe7de1d0d407949797f
+  -k 77c7a452364b4fe7de1d0d407949797f \
   -i 10 \
   -d /path/to/database/batt.db -v
 ```
