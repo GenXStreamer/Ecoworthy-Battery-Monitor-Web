@@ -14,8 +14,8 @@ This project has three components:
 - `webapp.py` – Flask web interface for viewing stored data
 - `maintain_db.py` – database retention and summarisation tool
 
-There is a forth component `victron-poller.py`, which is optional. If you have a Victron MTTP controller this may prove useful.
-It polls the controller and adds the data to the database, providing some summary information in the web interface. This informaton is only displayed if the
+There is a forth component `victron-monitor.py`, which is optional. If you have a Victron MTTP controller this may prove useful.
+It polls the controller at a defined interval and adds the data to the database, providing some summary information in the web interface. This informaton is only displayed if the
 data is accessible in the battery DB so will not affect the collection of data from the ecoworthy battery. 
 
 ---
@@ -152,7 +152,7 @@ Tested on Victron 100/30 MTTP Controller only
 ### Usage
 
 ```bash
-/path/to/env/bin/python victron-poller.py [-h] -a ADDRESS -k KEY [-d FILE] [-i INTERVAL]
+/path/to/env/bin/python victron-monitor.py [-h] -a ADDRESS -k KEY [-d FILE] [-i INTERVAL]
 ```
 
 ### Options
@@ -169,7 +169,7 @@ Tested on Victron 100/30 MTTP Controller only
 ### Example
 
 ```bash
-/path/to/env/bin/python victron-poller.py \
+/path/to/env/bin/python victron-monitor.py \
   -a e6:48:60:86:5f:74 \
   -k 77c7a452364b4fe7de1d0d407949797f
   -i 10 \
