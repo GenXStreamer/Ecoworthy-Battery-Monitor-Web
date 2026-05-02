@@ -438,6 +438,12 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/status")
+def status_dashboard():
+    return render_template("status.html")
+
+
+
 @app.route("/api/status")
 def status():
     mac  = request.args.get("mac") or None
@@ -501,6 +507,50 @@ def solar_status():
     data    = get_solar_latest(address=address)
     if not data:
         return jsonify({"error": "no solar data"})
+
+    # ── Recalculate load using BMS as ground truth ────────────────
+    # The MPPT's own battery_charging_amps/watts may differ slightly
+    # from what the BMS measures at the terminals.  Use BMS amps × BMS
+    # voltage for the most accurate load figure.
+    batt = get_latest()   # most recent battery reading from any BMS
+    solar_w = data.get('solar_power_w')
+
+    if batt and solar_w is not None:
+        bms_amps  = batt.get('amps', 0) or 0
+        bms_volts = batt.get('volts') or data.get('battery_voltage_v')
+
+        if solar_w <= 0:
+            # No solar — MPPT has no output, zero everything on the solar side.
+            data['battery_charging_watts'] = 0
+            data['battery_charging_amps']  = 0
+            data['load_watts']             = 0
+            data['load_amps']              = 0
+            data['solar_amps']             = 0
+            data['load_source']            = 'bms'
+
+        else:
+            # Solar is active. Split = to_battery + to_load = solar_w exactly.
+            # Use BMS amps as the ground truth for what went into the battery,
+            # clamped so it never exceeds solar_w.
+            # Load gets whatever is left over — always >= 0.
+            if bms_amps > 0.05 and bms_volts:
+                to_batt_w = round(min(bms_amps * bms_volts, solar_w), 1)
+            else:
+                # Battery idle or discharging — nothing from solar goes to battery
+                to_batt_w = 0.0
+
+            to_load_w = round(max(0.0, solar_w - to_batt_w), 1)
+            v = bms_volts or data.get('battery_voltage_v') or 1
+
+            data['battery_charging_watts'] = to_batt_w
+            data['battery_charging_amps']  = round(to_batt_w / v, 2)
+            data['load_watts']             = to_load_w
+            data['load_amps']              = round(to_load_w / v, 2)
+            data['load_source']            = 'bms'
+
+        data['bms_amps']  = bms_amps
+        data['bms_volts'] = bms_volts
+
     return jsonify({"current": data})
 
 
