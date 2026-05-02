@@ -147,7 +147,7 @@ https://github.com/keshavdv/victron-ble/
 Follow the instructions listed in this project about retrieving the MAC address and encryption key
 for the device
 
-Tested on Victron 100/30 MTTP Controller only
+Tested on Victron 100/30 MPPT Controller only
 
 ### Usage
 
