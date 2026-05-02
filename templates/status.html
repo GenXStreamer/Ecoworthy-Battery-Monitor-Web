@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Power Status</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=DM+Sans:wght@300;400;600&display=swap');
+
+:root {
+  --bg:       #080c10;
+  --panel:    #0d1318;
+  --border:   #1a2530;
+  --glow-g:   #00ff88;
+  --glow-b:   #00aaff;
+  --glow-y:   #ffcc00;
+  --glow-r:   #ff4444;
+  --glow-o:   #ff8800;
+  --dim:      #2a3a4a;
+  --text:     #e6edf3;
+  --muted:    #8ba8b8;
+  --mono:     'JetBrains Mono', monospace;
+  --display:  'JetBrains Mono', monospace;
+  --sans:     'DM Sans', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  min-height: 100dvh;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+}
+
+/* Subtle scanline overlay */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px
+  );
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* ── Layout ── */
+.dashboard {
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  min-height: 100dvh;
+
+  /* Desktop: 3 cols, 4 rows */
+  grid-template-columns: minmax(200px, 260px) 1fr minmax(200px, 260px);
+  grid-template-rows: 42px 1fr 1fr 36px;
+  grid-template-areas:
+    "hdr  hdr  hdr"
+    "left  mid  right"
+    "left2 mid2 right2"
+    "foot foot foot";
+}
+
+/* ── Header ── */
+.header {
+  grid-area: hdr;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding: 0 6px 4px;
+}
+.header-title {
+  font-family: var(--display);
+  font-size: clamp(0.85rem, 2vw, 1.05rem);
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: var(--glow-b);
+  text-shadow: 0 0 12px rgba(0,170,255,0.5);
+}
+.header-time {
+  font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+.conn-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dim);
+  box-shadow: none;
+  transition: background 0.5s, box-shadow 0.5s;
+  display: inline-block;
+  margin-right: 6px;
+}
+.conn-dot.live { background: var(--glow-g); box-shadow: 0 0 8px var(--glow-g); }
+.conn-dot.err  { background: var(--glow-r); box-shadow: 0 0 8px var(--glow-r); }
+
+/* ── Panel base ── */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  padding: 10px 12px 8px;
+}
+
+.panel::before, .panel::after {
+  content: '';
+  position: absolute;
+  width: 10px; height: 10px;
+  border-color: var(--accent, var(--dim));
+  border-style: solid;
+}
+.panel::before { top: 0; left: 0; border-width: 1px 0 0 1px; }
+.panel::after  { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
+
+.panel-label {
+  font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+  align-self: flex-start;
+}
+.panel-value {
+  font-family: var(--display);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--val-color, var(--text));
+  text-shadow: 0 0 20px var(--val-glow, transparent);
+  transition: color 0.4s, text-shadow 0.4s;
+}
+.panel-unit {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-left: 3px;
+  vertical-align: bottom;
+  line-height: 1.8;
+}
+.panel-sub {
+  font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  margin-top: 4px;
+  align-self: flex-start;
+}
+
+/* ── Fluid value sizes ── */
+.val-xl { font-size: clamp(2rem,   5vw, 3.2rem); }
+.val-lg { font-size: clamp(1.5rem, 4vw, 2.4rem); }
+.val-md { font-size: clamp(1.2rem, 3vw, 1.9rem); }
+
+/* ── Status badge ── */
+.status-badge {
+  font-family: var(--display);
+  font-size: clamp(0.85rem, 2.5vw, 1.1rem);
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  padding: 6px 16px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  text-transform: uppercase;
+  transition: all 0.4s;
+}
+
+/* ── Runtime gauge ── */
+.runtime-ring {
+  position: relative;
+  width: clamp(80px, 15vw, 120px);
+  height: clamp(80px, 15vw, 120px);
+  flex-shrink: 0;
+}
+.runtime-ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+.ring-track { fill: none; stroke: var(--border); stroke-width: 8; }
+.ring-fill  { fill: none; stroke-width: 8; stroke-linecap: round;
+              transition: stroke-dasharray 1s ease, stroke 0.4s; }
+.runtime-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-family: var(--display);
+}
+.runtime-val  { font-size: clamp(1rem, 3vw, 1.3rem); font-weight: 900; line-height: 1; }
+.runtime-unit { font-size: clamp(0.75rem, 1.5vw, 0.85rem); color: var(--muted); letter-spacing: 0.1em; margin-top: 2px; }
+
+/* ── Power flow bar ── */
+.flow-bar-wrap {
+  width: 100%; height: 14px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 8px;
+  position: relative;
+}
+.flow-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+/* ── Split panel ── */
+.split-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 0;
+}
+.split-half {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 10px 8px 8px;
+  position: relative;
+}
+.split-half:first-child { border-right: 1px solid var(--border); }
+.split-label {
+  font-size: clamp(0.72rem, 1.5vw, 0.82rem);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.split-value {
+  font-family: var(--display);
+  font-size: clamp(1.2rem, 3.5vw, 1.8rem);
+  font-weight: 900;
+  line-height: 1;
+  transition: color 0.4s, text-shadow 0.4s;
+}
+.split-unit { font-size: 0.82rem; color: var(--muted); margin-left: 2px; }
+.split-sub  { font-size: clamp(0.72rem, 1.5vw, 0.82rem); color: var(--muted); margin-top: 3px; }
+
+/* ── Footer ── */
+.footer {
+  grid-area: foot;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  padding: 0 6px;
+  font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+/* ── Alert flash ── */
+@keyframes alertpulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.alert-active { animation: alertpulse 1s ease infinite; }
+
+/* ══ Mobile: stack to single column ══════════════════════════════ */
+@media (max-width: 699px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    grid-template-areas:
+      "hdr"
+      "left"
+      "right"
+      "mid"
+      "left2"
+      "right2"
+      "mid2"
+      "foot";
+    min-height: 100dvh;
+    height: auto;
+  }
+  .val-xl { font-size: 2.8rem; }
+  .val-lg { font-size: 2rem; }
+  .val-md { font-size: 1.6rem; }
+  .split-value { font-size: 1.8rem; }
+  .panel { padding: 14px 16px 12px; min-height: 120px; }
+}
+
+/* ══ Tablet landscape / 7" screen (700–1100px) ═══════════════════ */
+@media (min-width: 700px) and (max-width: 1100px) {
+  .dashboard {
+    grid-template-columns: 1fr 1.4fr 1fr;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="dashboard">
+
+  <!-- Header -->
+  <header class="header">
+    <div>
+      <span class="conn-dot" id="conn-dot"></span>
+      <span class="header-title">POWER MONITOR</span>
+    </div>
+    <div style="display:flex;gap:1.5rem;align-items:center">
+      <span id="solar-state-header" style="font-size:0.65rem;letter-spacing:0.15em;color:var(--muted)"></span>
+      <span class="header-time" id="hdr-time"></span>
+    </div>
+  </header>
+
+  <!-- Runtime remaining -->
+  <div class="panel" style="--accent:var(--glow-b); grid-area:left">
+    <div class="panel-label">Runtime Remaining</div>
+    <div class="runtime-ring">
+      <svg viewBox="0 0 120 120">
+        <circle class="ring-track" cx="60" cy="60" r="52"/>
+        <circle class="ring-fill" id="runtime-ring" cx="60" cy="60" r="52"
+                stroke="var(--glow-b)" stroke-dasharray="0 327"/>
+      </svg>
+      <div class="runtime-center">
+        <div class="runtime-val" id="runtime-val" style="color:var(--glow-b)">–</div>
+        <div class="runtime-unit" id="runtime-unit">HRS REMAINING</div>
+      </div>
+    </div>
+    <div class="panel-sub" id="runtime-sub" style="align-self:center;margin-top:6px">–</div>
+  </div>
+
+  <!-- System status + voltage -->
+  <div class="panel" style="--accent:var(--glow-g); grid-area:mid">
+    <div class="panel-label">System Status</div>
+    <div class="status-badge" id="status-badge" style="color:var(--dim);border-color:var(--dim)">–</div>
+    <div style="display:flex;gap:clamp(1rem,3vw,2rem);margin-top:12px;align-items:flex-end;flex-wrap:wrap;justify-content:center">
+      <div style="text-align:center">
+        <div style="font-size:clamp(0.75rem,1.5vw,0.82rem);letter-spacing:0.15em;color:var(--muted);margin-bottom:3px">BATTERY VOLTAGE</div>
+        <div class="panel-value val-lg" id="batt-v" style="--val-color:var(--glow-b)">
+          –<span class="panel-unit">V</span>
+        </div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:clamp(0.75rem,1.5vw,0.82rem);letter-spacing:0.15em;color:var(--muted);margin-bottom:3px">SOC</div>
+        <div class="panel-value val-lg" id="batt-soc" style="--val-color:var(--glow-g)">
+          –<span class="panel-unit">%</span>
+        </div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:clamp(0.75rem,1.5vw,0.82rem);letter-spacing:0.15em;color:var(--muted);margin-bottom:3px">TODAY YIELD</div>
+        <div class="panel-value val-md" id="yield-today" style="--val-color:var(--glow-y)">
+          –<span class="panel-unit">Wh</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Solar input -->
+  <div class="panel" style="--accent:var(--glow-y); grid-area:right">
+    <div class="panel-label">Solar Input</div>
+    <div class="panel-value val-xl" id="solar-a"
+         style="--val-color:var(--glow-y);--val-glow:rgba(255,204,0,0.5)">
+      –<span class="panel-unit">A</span>
+    </div>
+    <div class="panel-sub" id="solar-w-sub">– W</div>
+    <div class="flow-bar-wrap" style="margin-top:10px">
+      <div class="flow-bar-fill" id="solar-bar" style="background:var(--glow-y);width:0%"></div>
+    </div>
+    <div class="panel-sub" id="solar-charge-state" style="margin-top:4px;align-self:center"></div>
+  </div>
+
+  <!-- Battery amps in/out -->
+  <div class="panel split-panel" style="--accent:var(--glow-g);padding:0;grid-area:left2">
+    <div class="split-half">
+      <div class="split-label">Batt In</div>
+      <div class="split-value" id="batt-in"
+           style="color:var(--glow-g);text-shadow:0 0 16px rgba(0,255,136,0.4)">
+        –<span class="split-unit">A</span>
+      </div>
+      <div class="split-sub" id="batt-in-sub">–</div>
+    </div>
+    <div class="split-half">
+      <div class="split-label">Batt Out</div>
+      <div class="split-value" id="batt-out"
+           style="color:var(--glow-r);text-shadow:0 0 16px rgba(255,68,68,0.4)">
+        –<span class="split-unit">A</span>
+      </div>
+      <div class="split-sub" id="batt-out-sub">–</div>
+    </div>
+  </div>
+
+  <!-- Load -->
+  <div class="panel" style="--accent:var(--glow-o);grid-area:mid2">
+    <div class="panel-label">Load</div>
+    <div style="display:flex;gap:clamp(1rem,3vw,2.5rem);align-items:flex-end;flex-wrap:wrap;justify-content:center">
+      <div style="text-align:center">
+        <div style="font-size:clamp(0.75rem,1.5vw,0.82rem);letter-spacing:0.15em;color:var(--muted);margin-bottom:2px">TOTAL LOAD</div>
+        <div class="panel-value val-xl" id="load-a"
+             style="--val-color:var(--glow-o);--val-glow:rgba(255,136,0,0.5)">
+          –<span class="panel-unit">A</span>
+        </div>
+        <div class="panel-sub" id="load-w-sub" style="text-align:center">– W</div>
+      </div>
+      <div>
+        <div style="margin-bottom:10px">
+          <div style="font-size:clamp(0.75rem,1.5vw,0.82rem);letter-spacing:0.15em;color:var(--muted);margin-bottom:2px">FROM SOLAR</div>
+          <div style="font-family:var(--display);font-size:clamp(1rem,2.5vw,1.2rem);font-weight:700;
+                      color:var(--glow-y);text-shadow:0 0 10px rgba(255,204,0,0.4)"
+               id="load-from-solar">– A</div>
+        </div>
+        <div>
+          <div style="font-size:clamp(0.75rem,1.5vw,0.82rem);letter-spacing:0.15em;color:var(--muted);margin-bottom:2px">FROM BATTERY</div>
+          <div style="font-family:var(--display);font-size:clamp(1rem,2.5vw,1.2rem);font-weight:700;
+                      color:var(--glow-r);text-shadow:0 0 10px rgba(255,68,68,0.3)"
+               id="load-from-batt">– A</div>
+        </div>
+      </div>
+    </div>
+    <div class="flow-bar-wrap">
+      <div id="load-bar-solar" class="flow-bar-fill"
+           style="background:var(--glow-y);float:left;transition:width 0.6s"></div>
+      <div id="load-bar-batt"  class="flow-bar-fill"
+           style="background:var(--glow-r);float:left;transition:width 0.6s"></div>
+    </div>
+  </div>
+
+  <!-- To battery / To load -->
+  <div class="panel split-panel" style="--accent:var(--glow-y);padding:0;grid-area:right2">
+    <div class="split-half">
+      <div class="split-label">→ Battery</div>
+      <div class="split-value" id="to-batt"
+           style="color:var(--glow-g);text-shadow:0 0 14px rgba(0,255,136,0.4)">
+        –<span class="split-unit">A</span>
+      </div>
+      <div class="split-sub" id="to-batt-w">– W</div>
+    </div>
+    <div class="split-half">
+      <div class="split-label">→ Load</div>
+      <div class="split-value" id="to-load"
+           style="color:var(--glow-o);text-shadow:0 0 14px rgba(255,136,0,0.4)">
+        –<span class="split-unit">A</span>
+      </div>
+      <div class="split-sub" id="to-load-w">– W</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <span id="ft-battery">–</span>
+    <span id="ft-alert" style="color:var(--glow-r)"></span>
+    <span id="ft-updated">–</span>
+  </footer>
+
+</div>
+
+<script>
+const RING_CIRC = 2 * Math.PI * 52;
+
+function el(id) { return document.getElementById(id); }
+
+function fmt(v, dp=2) {
+  if (v === null || v === undefined) return '–';
+  return Number(v).toFixed(dp);
+}
+
+function setColour(elem, colour, glowRgb) {
+  elem.style.color      = colour;
+  elem.style.textShadow = glowRgb ? `0 0 18px rgba(${glowRgb},0.55)` : 'none';
+}
+
+// ── Clock ─────────────────────────────────────────────────────────
+function updateClock() {
+  el('hdr-time').textContent = new Date().toLocaleTimeString(
+    [], {hour:'2-digit', minute:'2-digit', second:'2-digit'}
+  );
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ── Runtime ring ──────────────────────────────────────────────────
+function setRuntime(soc_ah, cap_ah, bms_amps, charge_amps) {
+  // bms_amps: positive = charging, negative = discharging
+  // charge_amps: from solar (battery_charging_amps from MPPT)
+  const ring   = el('runtime-ring');
+  const valEl  = el('runtime-val');
+  const unitEl = el('runtime-unit');
+  const subEl  = el('runtime-sub');
+
+  const soc_pct = cap_ah > 0 ? (soc_ah / cap_ah) * 100 : 0;
+
+  if (bms_amps > 0.1) {
+    // ── Charging: ring fills green proportional to SOC ──────────
+    const dash = (soc_pct / 100) * RING_CIRC;
+    ring.style.strokeDasharray = `${dash} ${RING_CIRC}`;
+    ring.style.stroke = 'var(--glow-g)';
+
+    // Time to full = remaining capacity / charge rate
+    const rem_ah = cap_ah - soc_ah;
+    if (charge_amps > 0.1 && rem_ah > 0) {
+      const hrs = rem_ah / charge_amps;
+      if (hrs >= 1) {
+        const h = Math.floor(hrs);
+        const m = Math.round((hrs - h) * 60);
+        valEl.textContent  = `${h}:${String(m).padStart(2,'0')}`;
+      } else {
+        valEl.textContent = Math.round(hrs * 60) + 'm';
+      }
+      unitEl.textContent = 'TO FULL';
+    } else {
+      valEl.textContent  = soc_pct.toFixed(0) + '%';
+      unitEl.textContent = 'CHARGED';
+    }
+    setColour(valEl, 'var(--glow-g)', null);
+    subEl.textContent = `${fmt(soc_ah, 1)} / ${fmt(cap_ah, 1)} Ah`;
+
+  } else if (bms_amps < -0.1) {
+    // ── Discharging: ring fills blue proportional to time left ──
+    const dsg_a = Math.abs(bms_amps);
+    const hrs   = soc_ah / dsg_a;
+    const pct   = Math.min(1, hrs / 24);
+    const dash  = pct * RING_CIRC;
+
+    ring.style.strokeDasharray = `${dash} ${RING_CIRC}`;
+    ring.style.stroke = hrs < 2 ? 'var(--glow-r)' : hrs < 6 ? 'var(--glow-o)' : 'var(--glow-b)';
+
+    if (hrs >= 24) {
+      valEl.textContent  = '24+';
+      unitEl.textContent = 'HRS LEFT';
+    } else if (hrs >= 1) {
+      const h = Math.floor(hrs);
+      const m = Math.round((hrs - h) * 60);
+      valEl.textContent  = `${h}:${String(m).padStart(2,'0')}`;
+      unitEl.textContent = 'HRS LEFT';
+    } else {
+      valEl.textContent  = Math.round(hrs * 60);
+      unitEl.textContent = 'MIN LEFT';
+    }
+    const c = hrs < 2 ? 'var(--glow-r)' : hrs < 6 ? 'var(--glow-o)' : 'var(--glow-b)';
+    setColour(valEl, c, null);
+    subEl.textContent = `${fmt(soc_ah, 1)} Ah remaining`;
+
+  } else {
+    // ── Idle ─────────────────────────────────────────────────────
+    const dash = (soc_pct / 100) * RING_CIRC;
+    ring.style.strokeDasharray = `${dash} ${RING_CIRC}`;
+    ring.style.stroke = 'var(--glow-b)';
+    valEl.textContent  = soc_pct.toFixed(0) + '%';
+    unitEl.textContent = 'IDLE';
+    setColour(valEl, 'var(--glow-b)', null);
+    subEl.textContent = `${fmt(soc_ah, 1)} Ah`;
+  }
+}
+
+// ── Status badge ──────────────────────────────────────────────────
+function setStatus(amps) {
+  const badge = el('status-badge');
+  if (amps === null || amps === undefined) {
+    badge.textContent        = '–';
+    badge.style.color        = 'var(--dim)';
+    badge.style.borderColor  = 'var(--dim)';
+    badge.classList.remove('alert-active');
+    return;
+  }
+  if (amps > 0.5) {
+    badge.textContent        = 'CHARGING';
+    badge.style.color        = 'var(--glow-g)';
+    badge.style.borderColor  = 'var(--glow-g)';
+    badge.style.textShadow   = '0 0 12px rgba(0,255,136,0.5)';
+  } else if (amps < -0.5) {
+    badge.textContent        = 'DISCHARGING';
+    badge.style.color        = 'var(--glow-o)';
+    badge.style.borderColor  = 'var(--glow-o)';
+    badge.style.textShadow   = '0 0 12px rgba(255,136,0,0.4)';
+  } else {
+    badge.textContent        = 'IDLE';
+    badge.style.color        = 'var(--glow-b)';
+    badge.style.borderColor  = 'var(--glow-b)';
+    badge.style.textShadow   = 'none';
+  }
+  badge.classList.remove('alert-active');
+}
+
+// ── Solar bar ─────────────────────────────────────────────────────
+const SOLAR_PEAK_A = 30;
+function setSolarBar(solar_a) {
+  const pct = solar_a ? Math.min(100, (solar_a / SOLAR_PEAK_A) * 100) : 0;
+  el('solar-bar').style.width = pct + '%';
+}
+
+// ── Load split bar ────────────────────────────────────────────────
+function setLoadBar(from_solar_a, from_batt_a) {
+  const total = (from_solar_a || 0) + (from_batt_a || 0);
+  if (total <= 0) {
+    el('load-bar-solar').style.width = '0%';
+    el('load-bar-batt').style.width  = '0%';
+    return;
+  }
+  el('load-bar-solar').style.width = ((from_solar_a / total) * 100) + '%';
+  el('load-bar-batt').style.width  = ((from_batt_a  / total) * 100) + '%';
+}
+
+// ── Render ────────────────────────────────────────────────────────
+function render(batt, solar) {
+  const bAmp   = batt?.amps    ?? null;
+  const bVolt  = batt?.volts   ?? null;
+  const bSoc   = batt?.soc_pct ?? null;
+  const bSocAh = batt?.soc_ah  ?? null;
+  const flags  = batt?.protection_flags ?? [];
+
+  el('batt-v').innerHTML   = `${fmt(bVolt, 2)}<span class="panel-unit">V</span>`;
+  el('batt-soc').innerHTML = `${fmt(bSoc, 1)}<span class="panel-unit">%</span>`;
+  setColour(el('batt-soc'),
+    bSoc > 50 ? 'var(--glow-g)' : bSoc > 20 ? 'var(--glow-o)' : 'var(--glow-r)', null);
+
+  setStatus(bAmp);
+
+  const chgA = bAmp > 0 ? bAmp : 0;
+  const dsgA = bAmp < 0 ? Math.abs(bAmp) : 0;
+
+  el('batt-in').innerHTML        = `${fmt(chgA, 2)}<span class="split-unit">A</span>`;
+  el('batt-out').innerHTML       = `${fmt(dsgA, 2)}<span class="split-unit">A</span>`;
+  el('batt-in-sub').textContent  = chgA > 0 ? `${fmt(chgA * (bVolt||0), 0)} W` : '–';
+  el('batt-out-sub').textContent = dsgA > 0 ? `${fmt(dsgA * (bVolt||0), 0)} W` : '–';
+
+  const bCapAh   = batt?.cap_ah ?? 0;
+  const chgAmps  = solar?.battery_charging_amps ?? 0;
+  setRuntime(bSocAh, bCapAh, bAmp, chgAmps);
+
+  el('ft-battery').textContent = batt?.mac_addr
+    ? `BAT ${batt.mac_addr.slice(-8).toUpperCase()}` : '–';
+
+  if (flags.length > 0) {
+    el('ft-alert').textContent = '⚠ ' + flags.join(' · ');
+    el('ft-alert').classList.add('alert-active');
+  } else {
+    el('ft-alert').textContent = '';
+    el('ft-alert').classList.remove('alert-active');
+  }
+
+  const solarA  = solar?.solar_amps             ?? null;
+  const solarW  = solar?.solar_power_w          ?? null;
+  const toBattA = solar?.battery_charging_amps  ?? null;
+  const toBattW = solar?.battery_charging_watts ?? null;
+  const loadA   = solar?.load_amps              ?? null;
+  const loadW   = solar?.load_watts             ?? null;
+  const yieldWh = solar?.yield_today_wh         ?? null;
+  const csState = solar?.charge_state           ?? null;
+
+  el('solar-a').innerHTML       = `${fmt(solarA, 2)}<span class="panel-unit">A</span>`;
+  el('solar-w-sub').textContent = solarW !== null ? `${fmt(solarW, 0)} W` : '–';
+  setSolarBar(solarA);
+
+  const stateLabel = csState ? csState.toUpperCase() : '';
+  el('solar-charge-state').textContent = stateLabel;
+  el('solar-state-header').textContent = stateLabel;
+
+  el('yield-today').innerHTML     = `${fmt(yieldWh, 0)}<span class="panel-unit">Wh</span>`;
+  el('to-batt').innerHTML         = `${fmt(toBattA, 2)}<span class="split-unit">A</span>`;
+  el('to-batt-w').textContent     = toBattW !== null ? `${fmt(toBattW, 0)} W` : '–';
+  el('to-load').innerHTML         = `${fmt(loadA, 2)}<span class="split-unit">A</span>`;
+  el('to-load-w').textContent     = loadW !== null ? `${fmt(loadW, 0)} W` : '–';
+
+  const totalLoadA = (dsgA || 0) + (loadA || 0);
+  const totalLoadW = (dsgA * (bVolt||0)) + (loadW || 0);
+  el('load-a').innerHTML       = `${fmt(totalLoadA, 2)}<span class="panel-unit">A</span>`;
+  el('load-w-sub').textContent = `${fmt(totalLoadW, 0)} W`;
+
+  el('load-from-solar').textContent = `${fmt(loadA  || 0, 2)} A`;
+  el('load-from-batt').textContent  = `${fmt(dsgA   || 0, 2)} A`;
+  setLoadBar(loadA || 0, dsgA || 0);
+
+  el('ft-updated').textContent = 'UPD ' + new Date().toLocaleTimeString(
+    [], {hour:'2-digit', minute:'2-digit', second:'2-digit'}
+  );
+}
+
+// ── Connection dot ────────────────────────────────────────────────
+function setConn(state) {
+  el('conn-dot').className = 'conn-dot ' + state;
+}
+
+// ── Fetch ─────────────────────────────────────────────────────────
+let battData  = null;
+let solarData = null;
+
+async function fetchBatt() {
+  try {
+    const res = await fetch('/api/status');
+    const ct  = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('application/json')) { setConn('err'); return; }
+    const j = await res.json();
+    if (j.error) { setConn('err'); return; }
+    battData = j.current;
+    setConn('live');
+  } catch { setConn('err'); }
+}
+
+async function fetchSolar() {
+  try {
+    const res = await fetch('/api/solar/status');
+    const ct  = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('application/json')) return;
+    const j = await res.json();
+    if (!j.error) solarData = j.current;
+  } catch {}
+}
+
+async function refresh() {
+  await Promise.all([fetchBatt(), fetchSolar()]);
+  render(battData, solarData);
+}
+
+refresh();
+setInterval(refresh, 10_000);
+</script>
+</body>
+</html>

@@ -263,12 +263,45 @@
   .device-key { font-size: 0.8rem; color: var(--muted); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
   .device-val { font-size: 0.8rem; font-family: var(--mono); color: var(--text); }
 
-  /* ── SOC arc ── */
-  .soc-card { display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .soc-svg-wrap { position: relative; width: 120px; height: 70px; }
-  .soc-svg-wrap svg { overflow: visible; }
-  .soc-center-text { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); font-family: var(--mono); font-size: 1.4rem; line-height: 1; text-align: center; }
-  .soc-sub { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; font-family: var(--mono); text-align: center; }
+  /* ── SOC bar ── */
+  .soc-card { display: flex; flex-direction: column; justify-content: center; }
+  .soc-bar-wrap {
+    position: relative;
+    width: 100%;
+    height: 28px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0.4rem 0;
+    /* Full gradient always spans the whole bar */
+    background: linear-gradient(to right,
+      #f85149 0%,
+      #f85149 20%,
+      #d29922 50%,
+      #3fb950 80%,
+      #3fb950 100%
+    );
+  }
+  .soc-bar-track {
+    /* Dark overlay covers the unfilled portion — slides in from the right */
+    position: absolute; top: 0; right: 0; bottom: 0;
+    background: var(--bg3);
+    opacity: 0.85;
+    transition: width 0.6s ease;
+  }
+  .soc-bar-fill { display: none; }  /* not needed — gradient is on the wrap */
+  .soc-bar-pct {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 0.85rem;
+    color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    pointer-events: none;
+  }
+  .soc-val-large {
+    font-family: var(--mono);
+    font-size: 1.7rem;
+    line-height: 1;
+  }
+  .soc-sub { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; font-family: var(--mono); }
 
   /* ══ Solar panel ══════════════════════════════════════════════════ */
   .solar-section {
@@ -342,12 +375,10 @@
 <div class="grid grid-top">
   <div class="card soc-card" id="card-soc">
     <div class="card-label">State of Charge</div>
-    <div class="soc-svg-wrap">
-      <svg viewBox="0 0 120 65" width="120" height="65">
-        <path id="soc-track" d="M10,60 A55,55 0 0,1 110,60" fill="none" stroke="#21262d" stroke-width="10" stroke-linecap="round"/>
-        <path id="soc-fill"  d="M10,60 A55,55 0 0,1 110,60" fill="none" stroke="#3fb950" stroke-width="10" stroke-linecap="round" stroke-dasharray="0 173" style="transition:stroke-dasharray 0.6s ease"/>
-      </svg>
-      <div class="soc-center-text" id="soc-val">–</div>
+    <div class="soc-val-large" id="soc-val">–<span class="card-unit">%</span></div>
+    <div class="soc-bar-wrap">
+      <div class="soc-bar-track" id="soc-bar-track"></div>
+      <div class="soc-bar-pct" id="soc-bar-pct"></div>
     </div>
     <div class="soc-sub" id="soc-sub">– Ah / – Ah</div>
   </div>
@@ -356,6 +387,8 @@
     <div class="card-label">Voltage</div>
     <div class="card-value val-cyan" id="val-volts">–<span class="card-unit">V</span></div>
     <div class="card-sub" id="sub-switches">–</div>
+    <div class="card-sub" id="sub-runtime" style="margin-top:0.2rem">–</div>
+    <div class="card-sub" id="sub-timetofull" style="margin-top:0.2rem;display:none">–</div>
   </div>
 
   <div class="card">
@@ -390,6 +423,7 @@
       <button class="time-btn active" data-s="1800">30m</button>
       <button class="time-btn" data-s="3600">1h</button>
       <button class="time-btn" data-s="21600">6h</button>
+      <button class="time-btn" data-s="43200">12h</button>
       <button class="time-btn" data-s="86400">24h</button>
       <button class="time-btn" data-s="604800">7d</button>
       <button class="time-btn" data-s="2592000">30d</button>
@@ -530,6 +564,7 @@
       <button class="time-btn active" data-solar-s="1800">30m</button>
       <button class="time-btn" data-solar-s="3600">1h</button>
       <button class="time-btn" data-solar-s="21600">6h</button>
+      <button class="time-btn" data-solar-s="43200">12h</button>
       <button class="time-btn" data-solar-s="86400">24h</button>
       <button class="time-btn" data-solar-s="604800">7d</button>
       <button class="time-btn" data-solar-s="2592000">30d</button>
@@ -564,6 +599,7 @@ let currentMetric = 'soc_pct';
 let currentWindow = 1800;
 let currentMac    = '';    // empty = most-recent (single battery mode)
 let chartData     = [];
+let avgChargeAmps = null;  // rolling avg charge rate for time-to-full estimate
 
 const ctx = document.getElementById('main-chart').getContext('2d');
 const mainChart = new Chart(ctx, {
@@ -709,13 +745,15 @@ document.getElementById('dt-go').addEventListener('click', () => {
   });
 });
 
-// ── SOC arc ────────────────────────────────────────────────────────
-const ARC_LEN = 173; // approximate half-circle path length
-function setSocArc(pct) {
-  const fill = document.getElementById('soc-fill');
-  const len  = (pct / 100) * ARC_LEN;
-  fill.setAttribute('stroke-dasharray', `${len} ${ARC_LEN}`);
-  fill.setAttribute('stroke', pct > 50 ? '#3fb950' : pct > 20 ? '#d29922' : '#f85149');
+// ── SOC bar ────────────────────────────────────────────────────────
+function setSocBar(pct) {
+  const track = document.getElementById('soc-bar-track');
+  const lbl   = document.getElementById('soc-bar-pct');
+  const pctClamped = Math.max(0, Math.min(100, pct));
+  // The gradient lives on the parent wrap (always full width).
+  // We reveal it by shrinking a dark overlay from the right.
+  track.style.width   = (100 - pctClamped) + '%';
+  lbl.textContent     = pctClamped.toFixed(1) + '%';
 }
 
 // ── Cell bars ──────────────────────────────────────────────────────
@@ -829,13 +867,66 @@ function ampsClass(a) {
 // ── Update KPI cards ──────────────────────────────────────────────
 function updateKpis(cur) {
   const soc = cur.soc_pct ?? 0;
-  setSocArc(soc);
-  document.getElementById('soc-val').textContent = soc.toFixed(1) + '%';
+  setSocBar(soc);
+  document.getElementById('soc-val').innerHTML =
+    `${soc.toFixed(1)}<span class="card-unit">%</span>`;
   document.getElementById('soc-sub').textContent =
     `${(cur.soc_ah||0).toFixed(1)} Ah / ${(cur.cap_ah||0).toFixed(1)} Ah`;
 
   const voltsEl = document.getElementById('val-volts');
   voltsEl.innerHTML = `${(cur.volts||0).toFixed(2)}<span class="card-unit">V</span>`;
+
+  // Runtime remaining / time to full — shown under voltage
+  const runtimeEl   = document.getElementById('sub-runtime');
+  const ttfEl       = document.getElementById('sub-timetofull');
+  const _amps       = cur.amps   || 0;
+  const _socAh      = cur.soc_ah || 0;
+  const _capAh      = cur.cap_ah || 0;
+
+  if (_amps < -0.1 && _socAh > 0) {
+    // Discharging — show time remaining
+    const hrs = _socAh / Math.abs(_amps);
+    let rtStr;
+    if (hrs >= 24)      rtStr = '24h+ remaining';
+    else if (hrs >= 1)  rtStr = `${Math.floor(hrs)}h ${Math.round((hrs % 1) * 60)}m remaining`;
+    else                rtStr = `${Math.round(hrs * 60)}m remaining`;
+    runtimeEl.textContent = rtStr;
+    runtimeEl.style.color = hrs < 2 ? 'var(--red)' : hrs < 6 ? 'var(--yellow)' : 'var(--muted)';
+    ttfEl.style.display   = 'none';
+
+  } else if (_amps > 0.1 && _capAh > 0) {
+    // Charging — show time to full using avg charge rate if available
+    runtimeEl.textContent = 'charging';
+    runtimeEl.style.color = 'var(--green)';
+
+    const remAh   = _capAh - _socAh;
+    const rate    = avgChargeAmps || _amps;
+    const rateStr = avgChargeAmps
+      ? `avg ${avgChargeAmps.toFixed(2)}A`
+      : `${_amps.toFixed(2)}A`;
+
+    if (remAh <= 0) {
+      ttfEl.textContent   = 'fully charged';
+      ttfEl.style.color   = 'var(--green)';
+      ttfEl.style.display = '';
+    } else if (rate > 0.05) {
+      const hrs = remAh / rate;
+      let ttfStr;
+      if (hrs >= 24)      ttfStr = '24h+ to full';
+      else if (hrs >= 1)  ttfStr = `${Math.floor(hrs)}h ${Math.round((hrs % 1) * 60)}m to full`;
+      else                ttfStr = `${Math.round(hrs * 60)}m to full`;
+      ttfEl.textContent   = `${ttfStr} (${rateStr})`;
+      ttfEl.style.color   = 'var(--muted)';
+      ttfEl.style.display = '';
+    } else {
+      ttfEl.style.display = 'none';
+    }
+
+  } else {
+    runtimeEl.textContent = 'idle';
+    runtimeEl.style.color = 'var(--muted)';
+    ttfEl.style.display   = 'none';
+  }
 
   const ampsEl = document.getElementById('val-amps');
   ampsEl.className = 'card-value ' + ampsClass(cur.amps||0);
@@ -1202,6 +1293,22 @@ document.querySelectorAll('[data-solar-s]').forEach(btn => {
   });
 });
 
+// ── Average charge rate (for time-to-full estimate) ─────────────
+async function fetchAvgCharge() {
+  try {
+    const mac = currentMac ? `&mac=${encodeURIComponent(currentMac)}` : '';
+    const res = await fetch(`/api/history?seconds=3600&max_points=600${mac}`);
+    const ct  = res.headers.get('content-type') || '';
+    if (!res.ok || !ct.includes('application/json')) return;
+    const data = await res.json();
+    const pts  = (data.data || []).filter(p => p.amps > 0.1);
+    if (pts.length < 3) { avgChargeAmps = null; return; }
+    avgChargeAmps = pts.reduce((s, p) => s + p.amps, 0) / pts.length;
+  } catch (e) {
+    console.error('fetchAvgCharge:', e);
+  }
+}
+
 // ── Boot ─────────────────────────────────────────────────────────
 // KPIs poll every 10 s; chart refreshes every 30 s on its own cycle.
 syncDateInputsToWindow();   // pre-fill date picker to match default window
@@ -1211,12 +1318,14 @@ fetchDeviceInfo();
 fetchSolarDevices();
 fetchSolarStatus();
 fetchSolarChart();
+fetchAvgCharge();
 setInterval(fetchStatus,      10_000);
 setInterval(fetchChart,       30_000);
 setInterval(fetchDeviceInfo,  60_000);
 setInterval(fetchSolarStatus, 10_000);
 setInterval(fetchSolarChart,  30_000);
 setInterval(fetchSolarDevices,60_000);
+setInterval(fetchAvgCharge,   60_000);
 </script>
 </body>
 </html>
