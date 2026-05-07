@@ -12,7 +12,7 @@ Requires:
 Usage:
     python victron-monitor.py \\
         -a e6:48:60:86:5f:74 \\
-        -k 77c7a452364b4fe7de1d0d407949797f \\
+        -k 5cc877b465d65fa970128d5ecabb456b \\
         -d /home/dan/BatMon/batt.db \\
         -i 10
 
@@ -200,12 +200,18 @@ class VictronScanner:
         self._last_stored = 0.0
         self._device_name = None
 
+    # If no advertisement is seen within this many seconds, restart the scanner
+    WATCHDOG_TIMEOUT_S = 120
+
     async def run(self):
         print(f"Scanning for {self._address} …")
+        last_seen = [time.time()]   # mutable so callback can update it
 
         def callback(device, advertisement_data):
             if device.address.upper() != self._address:
                 return
+
+            last_seen[0] = time.time()   # reset watchdog on any advert from our device
 
             now = time.time()
             if now - self._last_stored < self._interval:
@@ -217,9 +223,6 @@ class VictronScanner:
                 return
 
             try:
-                # Exactly as per the README:
-                #   parser = detect_device_type(data)
-                #   parsed_data = parser(key).parse(data)
                 parser_class = detect_device_type(raw)
                 if parser_class is None:
                     return
@@ -237,10 +240,26 @@ class VictronScanner:
             except Exception as exc:
                 print(f"  [parse error] {exc}", file=sys.stderr)
 
-        async with BleakScanner(callback) as _:
-            print("Scanner running — press Ctrl+C to stop.")
-            while True:
-                await asyncio.sleep(1)
+        while True:
+            try:
+                async with BleakScanner(callback) as _:
+                    print("Scanner running — press Ctrl+C to stop.", flush=True)
+                    last_seen[0] = time.time()
+
+                    while True:
+                        await asyncio.sleep(10)
+                        stale = time.time() - last_seen[0]
+                        if stale > self.WATCHDOG_TIMEOUT_S:
+                            print(
+                                f"  [watchdog] No advertisement for {stale:.0f}s — "
+                                f"restarting scanner …", flush=True
+                            )
+                            break   # exit inner loop → scanner context exits → restart
+
+            except Exception as exc:
+                print(f"  [scanner error] {exc} — restarting in 15s …",
+                      file=sys.stderr, flush=True)
+                await asyncio.sleep(15)
 
 
 # ---------------------------------------------------------------------------
